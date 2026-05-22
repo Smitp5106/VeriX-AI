@@ -6,14 +6,14 @@
       "use": "@vercel/next"
     },
     {
-      "src": "backend/index.js",
+      "src": "backend/server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/backend/(.*)",
-      "dest": "backend/index.js"
+      "src": "/api/(.*)",
+      "dest": "backend/server.js"
     },
     {
       "src": "/(.*)",
