@@ -137,10 +137,8 @@ export default function AboutPage() {
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
           <div className="grid md:grid-cols-4 gap-12 text-center">
             {[
-              { icon: Users, value: "2M+", label: "Active Users" },
-              { icon: Globe, value: "150+", label: "Languages" },
+              { icon: Users, value: "-", label: "Active Users" },
               { icon: Award, value: "99.2%", label: "Accuracy" },
-              { icon: Building, value: "500+", label: "Enterprise Clients" },
             ].map((stat, i) => (
               <motion.div
                 key={stat.label}
