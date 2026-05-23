@@ -20,11 +20,11 @@ mongoose
   });
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/detect', require('./routes/detect'));
+app.use(['/api/auth', '/_backend/api/auth'], require('./routes/auth'));
+app.use(['/api/detect', '/_backend/api/detect'], require('./routes/detect'));
 
 // Health check endpoint
-app.get('/', (req, res) => {
+app.get(['/', '/_backend'], (req, res) => {
   res.json({ status: 'ok', message: 'VeriX AI Authentication Backend is running' });
 });
 
