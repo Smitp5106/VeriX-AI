@@ -135,24 +135,27 @@ export default function AboutPage() {
       {/* Stats */}
       <section className="py-20 lg:py-32 bg-foreground text-background">
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
-          <div className="grid md:grid-cols-4 gap-12 text-center">
-            {[
-              { icon: Users, value: "-", label: "Active Users" },
-              { icon: Award, value: "99.2%", label: "Accuracy" },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                viewport={{ once: true }}
-              >
-                <stat.icon className="w-8 h-8 mx-auto mb-4 text-background/60" />
-                <div className="text-4xl lg:text-5xl font-bold mb-2">{stat.value}</div>
-                <div className="text-background/60">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
+          <div className="grid md:grid-cols-2 gap-12 text-center justify-center">
+  {[
+    { icon: Users, value: "-", label: "Active Users" },
+    { icon: Award, value: "99.2%", label: "Accuracy" },
+  ].map((stat, i) => (
+    <motion.div
+      key={stat.label}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: i * 0.1 }}
+      viewport={{ once: true }}
+      className="flex flex-col items-center"
+    >
+      <stat.icon className="w-8 h-8 mb-4 text-background/60" />
+      <div className="text-4xl lg:text-5xl font-bold mb-2">
+        {stat.value}
+      </div>
+      <div className="text-background/60">{stat.label}</div>
+    </motion.div>
+  ))}
+</div>
         </div>
       </section>
       
