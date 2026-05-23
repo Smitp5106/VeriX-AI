@@ -87,12 +87,15 @@ export default function SignupPage() {
       return;
     }
 
-    if (provider === "google") {
+    const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    const isGoogleConfigured = googleClientId && googleClientId !== "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
+
+    if (provider === "google" && isGoogleConfigured) {
       if (typeof window !== "undefined" && (window as any).google) {
         setIsLoading(true);
         try {
           const client = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+            client_id: googleClientId,
             scope: "openid email profile",
             callback: async (tokenResponse: any) => {
               if (tokenResponse && tokenResponse.access_token) {

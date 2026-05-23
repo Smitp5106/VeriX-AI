@@ -167,7 +167,11 @@ router.post('/google-login', async (req, res) => {
 
     const axios = require('axios');
     // Verify token by querying Google UserInfo API
-    const googleRes = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
+    const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
     const { email, given_name, family_name } = googleRes.data;
 
     if (!email) {
