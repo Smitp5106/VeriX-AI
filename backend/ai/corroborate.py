@@ -113,6 +113,170 @@ def _word_overlap(a: str, b: str) -> float:
     return len(wa & wb) / len(wa | wb)
 
 
+SYNONYM_GROUPS = [
+    ["killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead"],
+    ["pm", "prime", "minister", "premier"],
+    ["president", "potus", "leader"],
+    ["win", "victory", "won", "triumph", "wins"],
+    ["steal", "stolen", "theft", "rob", "rigged", "stealing"],
+    ["arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests"],
+    ["condolences", "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"],
+    ["bill", "law", "legislation", "act"],
+    ["ban", "forbid", "prohibit", "illegal", "outlaw", "banned", "bans"]
+]
+
+BLOCKER_WORDS = {
+    "but", "however", "although", "condolences", "tribute", "mourns", "mourn", 
+    "denies", "claims", "fake", "false", "hoax", "rumor", "not", "never", "refutes",
+    "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief"
+}
+
+STOP_WORDS = {
+    'the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'by','from','is','are','was','were','be','been','being','have','has',
+    'had','do','does','did','will','would','could','should','may','might',
+    'shall','can','that','this','these','those','it','its','as','if','into',
+    'about','after','before','between','through','during','including','until',
+    'against','among','throughout','despite','towards','upon',
+    'breaking','watch','read','just','exposed','shocking',
+    'BREAKING','WATCH','READ','JUST','EXPOSED','SHOCKING'
+}
+
+def get_tokens(text: str) -> list[str]:
+    return re.findall(r'\b\w+\b', text.lower())
+
+def get_synonyms(word: str) -> list[str]:
+    syns = {word}
+    for group in SYNONYM_GROUPS:
+        if word in group:
+            syns.update(group)
+    return list(syns)
+
+def passes_two_layer_matching(claim: str, title: str) -> bool:
+    clean_claim = re.sub(r'https?://\S+', '', claim)
+    clean_claim = re.sub(r'[^\w\s]', ' ', clean_claim)
+    
+    clean_title = re.sub(r'https?://\S+', '', title)
+    clean_title = re.sub(r'[^\w\s]', ' ', clean_title)
+
+    claim_tokens = get_tokens(clean_claim)
+    title_tokens = get_tokens(clean_title)
+
+    if not claim_tokens or not title_tokens:
+        return False
+
+    # --- LAYER 1: Semantic Recall ---
+    claim_keywords = [w for w in claim_tokens if len(w) > 3 and w not in STOP_WORDS]
+    if not claim_keywords:
+        return True
+
+    matched_count = 0
+    for keyword in claim_keywords:
+        syns = get_synonyms(keyword)
+        if any(syn in title_tokens for syn in syns):
+            matched_count += 1
+
+    recall = matched_count / len(claim_keywords)
+    if recall < 0.50:
+        return False
+
+    # --- LAYER 2: Subject-Predicate Coherence ---
+    orig_words = re.findall(r'\b\w+\b', re.sub(r'https?://\S+', '', claim))
+    entities = []
+    actions = []
+
+    KNOWN_ACTIONS = {
+        "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
+        "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
+        "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
+        "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
+        "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+    }
+
+    for word in orig_words:
+        lower = word.lower()
+        if lower in STOP_WORDS or len(lower) <= 2:
+            continue
+        
+        is_capitalized = bool(re.match(r'^[A-Z][a-z]*', word)) or bool(re.match(r'^[A-Z]+$', word))
+        if is_capitalized:
+            entities.append(lower)
+        elif lower in KNOWN_ACTIONS or len(lower) > 3:
+            actions.append(lower)
+
+    # Fallback actions
+    if not actions:
+        for word in orig_words:
+            lower = word.lower()
+            if lower not in entities and lower not in STOP_WORDS and len(lower) > 3:
+                actions.append(lower)
+
+    if entities and actions:
+        coherent_pair_found = False
+        for ent in entities:
+            ent_syns = get_synonyms(ent)
+            for act in actions:
+                act_syns = get_synonyms(act)
+
+                ent_indices = [idx for idx, token in enumerate(title_tokens) if token in ent_syns]
+                act_indices = [idx for idx, token in enumerate(title_tokens) if token in act_syns]
+
+                for i in ent_indices:
+                    for j in act_indices:
+                        if abs(i - j) <= 5:
+                            start = min(i, j) + 1
+                            end = max(i, j)
+                            has_blocker = False
+                            for k in range(start, end):
+                                if title_tokens[k] in BLOCKER_WORDS:
+                                    has_blocker = True
+                                    break
+                            if not has_blocker:
+                                coherent_pair_found = True
+                                break
+                    if coherent_pair_found:
+                        break
+                if coherent_pair_found:
+                    break
+            if coherent_pair_found:
+                break
+        if not coherent_pair_found:
+            return False
+    else:
+        # Fallback keywords proximity
+        keywords = claim_keywords
+        if len(keywords) >= 2:
+            close_pair_found = False
+            for i_idx, w1 in enumerate(keywords):
+                for w2 in keywords[i_idx+1:]:
+                    w1_indices = [idx for idx, t in enumerate(title_tokens) if t == w1]
+                    w2_indices = [idx for idx, t in enumerate(title_tokens) if t == w2]
+
+                    for idx1 in w1_indices:
+                        for idx2 in w2_indices:
+                            if abs(idx1 - idx2) <= 5:
+                                start = min(idx1, idx2) + 1
+                                end = max(idx1, idx2)
+                                has_blocker = False
+                                for k in range(start, end):
+                                    if title_tokens[k] in BLOCKER_WORDS:
+                                        has_blocker = True
+                                        break
+                                if not has_blocker:
+                                    close_pair_found = True
+                                    break
+                        if close_pair_found:
+                            break
+                    if close_pair_found:
+                        break
+                if close_pair_found:
+                    break
+            if not close_pair_found:
+                return False
+
+    return True
+
+
 # ── RSS fetching ───────────────────────────────────────────────────────────────
 
 def _fetch_rss(url: str, timeout: int = 8) -> list[dict]:
@@ -209,27 +373,30 @@ def corroborate(text: str, max_results: int = 10) -> dict:
 
     # Score each result
     for item in items[:max_results]:
+        # Both layers must pass. Trusted source alone is never enough.
+        passes = passes_two_layer_matching(text, item["title"])
+        if not passes:
+            continue
+
         sim    = _word_overlap(text, item["title"])
         src_lc = item["source"].lower()
 
         is_trusted    = any(t in src_lc for t in TRUSTED_SOURCES)
         is_unreliable = any(u in src_lc for u in UNRELIABLE_SOURCES)
 
-        # Only include results with at least 15% keyword overlap
-        if sim >= 0.15 or is_trusted:
-            result["matches"].append({
-                "title":      item["title"],
-                "source":     item["source"],
-                "link":       item["link"],
-                "pubDate":    item["pubDate"],
-                "trusted":    is_trusted,
-                "unreliable": is_unreliable,
-                "similarity": round(sim, 3),
-            })
-            if is_trusted:
-                result["trusted_count"] += 1
-            if is_unreliable:
-                result["unreliable_count"] += 1
+        result["matches"].append({
+            "title":      item["title"],
+            "source":     item["source"],
+            "link":       item["link"],
+            "pubDate":    item["pubDate"],
+            "trusted":    is_trusted,
+            "unreliable": is_unreliable,
+            "similarity": round(sim, 3),
+        })
+        if is_trusted:
+            result["trusted_count"] += 1
+        if is_unreliable:
+            result["unreliable_count"] += 1
 
     # Score: 1.0 = 3+ trusted sources confirmed; scales linearly below that
     result["corroboration_score"] = round(min(1.0, result["trusted_count"] / 3.0), 4)

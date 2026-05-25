@@ -184,6 +184,204 @@ function wordOverlap(a, b) {
   return intersectionSize / unionSize;
 }
 
+const SYNONYM_GROUPS = [
+  ["killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead"],
+  ["pm", "prime", "minister", "premier"],
+  ["president", "potus", "leader"],
+  ["win", "victory", "won", "triumph", "wins"],
+  ["steal", "stolen", "theft", "rob", "rigged", "stealing"],
+  ["arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests"],
+  ["condolences", "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"],
+  ["bill", "law", "legislation", "act"],
+  ["ban", "forbid", "prohibit", "illegal", "outlaw", "banned", "bans"]
+];
+
+const BLOCKER_WORDS = new Set([
+  "but", "however", "although", "condolences", "tribute", "mourns", "mourn", 
+  "denies", "claims", "fake", "false", "hoax", "rumor", "not", "never", "refutes",
+  "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief"
+]);
+
+const STOP_WORDS = new Set([
+  'the','a','an','and','or','but','in','on','at','to','for','of','with',
+  'by','from','is','are','was','were','be','been','being','have','has',
+  'had','do','does','did','will','would','could','should','may','might',
+  'shall','can','that','this','these','those','it','its','as','if','into',
+  'about','after','before','between','through','during','including','until',
+  'against','among','throughout','despite','towards','upon',
+  'breaking','watch','read','just','exposed','shocking',
+  'BREAKING','WATCH','READ','JUST','EXPOSED','SHOCKING'
+]);
+
+function getTokens(text) {
+  return text.toLowerCase().match(/\b\w+\b/g) || [];
+}
+
+function getSynonyms(word) {
+  const synonyms = [word];
+  for (const group of SYNONYM_GROUPS) {
+    if (group.includes(word)) {
+      synonyms.push(...group);
+    }
+  }
+  return Array.from(new Set(synonyms));
+}
+
+function passesTwoLayerMatching(claim, title) {
+  const cleanClaim = claim.replace(/https?:\/\/\S+/g, '').replace(/[^\w\s]/g, ' ');
+  const cleanTitle = title.replace(/https?:\/\/\S+/g, '').replace(/[^\w\s]/g, ' ');
+
+  const claimTokens = getTokens(cleanClaim);
+  const titleTokens = getTokens(cleanTitle);
+
+  if (claimTokens.length === 0 || titleTokens.length === 0) return false;
+
+  // --- LAYER 1: Semantic Recall ---
+  const claimKeywords = claimTokens.filter(w => w.length > 3 && !STOP_WORDS.has(w));
+  if (claimKeywords.length === 0) return true;
+
+  let matchedCount = 0;
+  for (const keyword of claimKeywords) {
+    const synonyms = getSynonyms(keyword);
+    const hasMatch = synonyms.some(syn => titleTokens.includes(syn));
+    if (hasMatch) {
+      matchedCount++;
+    }
+  }
+
+  const recall = matchedCount / claimKeywords.length;
+  if (recall < 0.50) {
+    return false;
+  }
+
+  // --- LAYER 2: Subject-Predicate Coherence ---
+  const origClaimWords = claim.replace(/https?:\/\/\S+/g, '').match(/\b\w+\b/g) || [];
+  const entities = [];
+  const actions = [];
+
+  const KNOWN_ACTIONS = new Set([
+    "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
+    "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
+    "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
+    "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
+    "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+  ]);
+
+  for (const word of origClaimWords) {
+    const lower = word.toLowerCase();
+    if (STOP_WORDS.has(lower) || lower.length <= 2) continue;
+
+    const isCapitalized = /^[A-Z][a-z]*/.test(word) || /^[A-Z]+$/.test(word);
+    if (isCapitalized) {
+      entities.push(lower);
+    } else if (KNOWN_ACTIONS.has(lower) || lower.length > 3) {
+      actions.push(lower);
+    }
+  }
+
+  if (actions.length === 0) {
+    for (const word of origClaimWords) {
+      const lower = word.toLowerCase();
+      if (!entities.includes(lower) && !STOP_WORDS.has(lower) && lower.length > 3) {
+        actions.push(lower);
+      }
+    }
+  }
+
+  if (entities.length > 0 && actions.length > 0) {
+    let coherentPairFound = false;
+
+    for (const ent of entities) {
+      const entSyns = getSynonyms(ent);
+      for (const act of actions) {
+        const actSyns = getSynonyms(act);
+
+        const entIndices = [];
+        titleTokens.forEach((token, idx) => {
+          if (entSyns.includes(token)) entIndices.push(idx);
+        });
+
+        const actIndices = [];
+        titleTokens.forEach((token, idx) => {
+          if (actSyns.includes(token)) actIndices.push(idx);
+        });
+
+        for (const i of entIndices) {
+          for (const j of actIndices) {
+            if (Math.abs(i - j) <= 5) {
+              const start = Math.min(i, j) + 1;
+              const end = Math.max(i, j);
+              let hasBlocker = false;
+
+              for (let k = start; k < end; k++) {
+                if (BLOCKER_WORDS.has(titleTokens[k])) {
+                  hasBlocker = true;
+                  break;
+                }
+              }
+
+              if (!hasBlocker) {
+                coherentPairFound = true;
+                break;
+              }
+            }
+          }
+          if (coherentPairFound) break;
+        }
+        if (coherentPairFound) break;
+      }
+      if (coherentPairFound) break;
+    }
+
+    if (!coherentPairFound) {
+      return false;
+    }
+  } else {
+    const keywords = claimKeywords;
+    if (keywords.length >= 2) {
+      let closePairFound = false;
+      for (let i = 0; i < keywords.length; i++) {
+        for (let j = i + 1; j < keywords.length; j++) {
+          const w1 = keywords[i];
+          const w2 = keywords[j];
+          const w1Indices = [];
+          const w2Indices = [];
+          titleTokens.forEach((t, idx) => {
+            if (t === w1) w1Indices.push(idx);
+            if (t === w2) w2Indices.push(idx);
+          });
+
+          for (const idx1 of w1Indices) {
+            for (const idx2 of w2Indices) {
+              if (Math.abs(idx1 - idx2) <= 5) {
+                const start = Math.min(idx1, idx2) + 1;
+                const end = Math.max(idx1, idx2);
+                let hasBlocker = false;
+                for (let k = start; k < end; k++) {
+                  if (BLOCKER_WORDS.has(titleTokens[k])) {
+                    hasBlocker = true;
+                    break;
+                  }
+                }
+                if (!hasBlocker) {
+                  closePairFound = true;
+                  break;
+                }
+              }
+            }
+            if (closePairFound) break;
+          }
+          if (closePairFound) break;
+        }
+        if (closePairFound) break;
+      }
+      if (!closePairFound) return false;
+    }
+  }
+
+  return true;
+}
+
 const axios = require('axios');
 
 function getTagText(itemXml, tag) {
@@ -270,6 +468,10 @@ async function corroborate(text, maxResults = 10) {
   result.total_found = items.length;
 
   for (const item of items.slice(0, maxResults)) {
+    // Both layers must pass. Trusted source alone is never enough.
+    const passes = passesTwoLayerMatching(text, item.title);
+    if (!passes) continue;
+
     const sim = wordOverlap(text, item.title);
     const srcLc = item.source.toLowerCase();
 
@@ -289,20 +491,18 @@ async function corroborate(text, maxResults = 10) {
       }
     }
 
-    if (sim >= 0.15 || isTrusted) {
-      result.matches.push({
-        title: item.title,
-        source: item.source,
-        link: item.link,
-        pubDate: item.pubDate,
-        trusted: isTrusted,
-        unreliable: isUnreliable,
-        similarity: parseFloat(sim.toFixed(3))
-      });
-      
-      if (isTrusted) result.trusted_count++;
-      if (isUnreliable) result.unreliable_count++;
-    }
+    result.matches.push({
+      title: item.title,
+      source: item.source,
+      link: item.link,
+      pubDate: item.pubDate,
+      trusted: isTrusted,
+      unreliable: isUnreliable,
+      similarity: parseFloat(sim.toFixed(3))
+    });
+    
+    if (isTrusted) result.trusted_count++;
+    if (isUnreliable) result.unreliable_count++;
   }
 
   result.corroboration_score = parseFloat(Math.min(1.0, result.trusted_count / 3.0).toFixed(4));
