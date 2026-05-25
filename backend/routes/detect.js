@@ -24,10 +24,31 @@ function tokenize(text) {
   return tokens;
 }
 
+// Trusted outlet lists
+const TRUSTED_SOURCES = new Set([
+  "reuters", "associated press", "ap news", "bbc", "bloomberg",
+  "the guardian", "guardian", "npr", "pbs", "al jazeera",
+  "afp", "agence france", "washington post", "new york times", "nyt",
+  "wall street journal", "wsj", "abc news", "cbs news", "nbc news",
+  "sky news", "financial times", "ft", "the economist", "time",
+  "newsweek", "cnbc", "forbes", "axios", "politico", "the hill",
+  "usa today", "los angeles times", "chicago tribune", "the atlantic",
+  "foreign affairs", "apnews", "c-span", "vox", "theprint",
+  "ndtv", "the hindu", "times of india", "hindustan times",
+  "dawn", "the wire", "scroll.in", "business standard", "livemint"
+]);
+
+const UNRELIABLE_SOURCES = new Set([
+  "breitbart", "infowars", "21wire", "21stcenturywire", "naturalnews",
+  "zerohedge", "beforeitsnews", "yournewswire", "newspunch",
+  "activistpost", "thegatewaypu", "westernjournal", "oann",
+  "newsmax", "epoch times", "thefederalist", "dailycaller"
+]);
+
 // Heuristics constants
 const FAKE_PATTERNS = [
   /\b(breaking|bombshell|explosive|shocking)\b.*\b(truth|secret|exposed|revealed|proof)\b/i,
-  /\b(mainstream media|msm|fake news media)\b.*\b(hiding|lying|won\'t tell|cover.?up)\b/i,
+  /\b(mainstream media|msm)\b.*\b(hiding|lying|cover.?up)\b/i,
   /\b(deep state|globalists?|new world order|cabal|illuminati)\b/i,
   /\b(wake up|sheeple|sheep|red pill|truth seekers?)\b/i,
   /\b(100\s*%|proven|undeniable|absolute)\s+(proof|evidence|fact)/i,
@@ -57,6 +78,271 @@ const REAL_WORDS = new Set([
   'officials', 'analysts', 'statement', 'briefing', 'parliament',
   'legislation', 'administration', 'department', 'ministry'
 ]);
+
+function decodeEntities(str) {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+}
+
+function extractQuery(text, maxWords = 8) {
+  // Remove URLs and punctuation
+  let processed = text.replace(/https?:\/\/\S+/g, '');
+  processed = processed.replace(/[^\w\s]/g, ' ');
+
+  // Prefer capitalised multi-word spans
+  const capsMatches = processed.match(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,}){0,3}\b/g) || [];
+  const capsFlat = [];
+  for (const c of capsMatches) {
+    capsFlat.push(...c.split(/\s+/));
+  }
+
+  const STOPS = new Set([
+    'the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'by','from','is','are','was','were','be','been','being','have','has',
+    'had','do','does','did','will','would','could','should','may','might',
+    'shall','can','that','this','these','those','it','its','as','if','into',
+    'about','after','before','between','through','during','including','until',
+    'against','among','throughout','despite','towards','upon',
+    'breaking','watch','read','just','exposed','shocking',
+    'BREAKING','WATCH','READ','JUST','EXPOSED','SHOCKING'
+  ]);
+
+  const allWords = processed.split(/\s+/).filter(w => w.length > 3 && !STOPS.has(w));
+  const ordered = [...capsFlat, ...allWords.filter(w => !capsFlat.includes(w))];
+
+  // Deduplicate preserving order
+  const seen = new Set();
+  const unique = [];
+  for (const w of ordered) {
+    const lw = w.toLowerCase();
+    if (!seen.has(lw)) {
+      seen.add(lw);
+      unique.push(w);
+    }
+  }
+
+  const query = unique.slice(0, maxWords).join(' ');
+  return query || text.slice(0, 80);
+}
+
+function wordOverlap(a, b) {
+  const wa = new Set((a.toLowerCase().match(/\b[a-z]{4,}\b/g) || []));
+  const wb = new Set((b.toLowerCase().match(/\b[a-z]{4,}\b/g) || []));
+  
+  if (wa.size === 0 || wb.size === 0) return 0.0;
+  
+  let intersectionSize = 0;
+  for (const w of wa) {
+    if (wb.has(w)) intersectionSize++;
+  }
+  
+  const unionSize = wa.size + wb.size - intersectionSize;
+  return intersectionSize / unionSize;
+}
+
+const axios = require('axios');
+
+function getTagText(itemXml, tag) {
+  const match = itemXml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i'));
+  return match ? match[1].trim() : '';
+}
+
+async function fetchRss(url, timeout = 8000) {
+  try {
+    const response = await axios.get(url, {
+      timeout,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    const xml = response.data;
+    
+    // Parse items using Regex
+    const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+    const items = [];
+    
+    for (const itemXml of itemMatches) {
+      let title = getTagText(itemXml, 'title');
+      let source = getTagText(itemXml, 'source');
+      let link = getTagText(itemXml, 'link');
+      let date = getTagText(itemXml, 'pubDate');
+      
+      title = decodeEntities(title);
+      source = decodeEntities(source);
+      link = decodeEntities(link);
+      date = decodeEntities(date);
+      
+      // Google News appends " - Source Name" to titles — strip it
+      if (title.includes(' - ')) {
+        const idx = title.lastIndexOf(' - ');
+        const mainTitle = title.substring(0, idx).trim();
+        const fallbackSource = title.substring(idx + 3).trim();
+        title = mainTitle;
+        if (!source) {
+          source = fallbackSource;
+        }
+      }
+      
+      if (title) {
+        items.push({ title, source, link, pubDate: date });
+      }
+    }
+    return items;
+  } catch (err) {
+    console.error(`RSS Fetch failed for ${url}:`, err.message);
+    return [];
+  }
+}
+
+async function corroborate(text, maxResults = 10) {
+  const query = extractQuery(text);
+  const result = {
+    query: query,
+    corroboration_score: 0.0,
+    trusted_count: 0,
+    unreliable_count: 0,
+    total_found: 0,
+    matches: [],
+    search_success: false,
+    error: null
+  };
+
+  const googleNewsUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+  let items = await fetchRss(googleNewsUrl);
+  
+  if (items.length === 0) {
+    const bingNewsUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss`;
+    items = await fetchRss(bingNewsUrl);
+  }
+
+  if (items.length === 0) {
+    result.error = "Both RSS endpoints returned no results (network issue or rate limit)";
+    return result;
+  }
+
+  result.search_success = true;
+  result.total_found = items.length;
+
+  for (const item of items.slice(0, maxResults)) {
+    const sim = wordOverlap(text, item.title);
+    const srcLc = item.source.toLowerCase();
+
+    let isTrusted = false;
+    for (const t of TRUSTED_SOURCES) {
+      if (srcLc.includes(t)) {
+        isTrusted = true;
+        break;
+      }
+    }
+
+    let isUnreliable = false;
+    for (const u of UNRELIABLE_SOURCES) {
+      if (srcLc.includes(u)) {
+        isUnreliable = true;
+        break;
+      }
+    }
+
+    if (sim >= 0.15 || isTrusted) {
+      result.matches.push({
+        title: item.title,
+        source: item.source,
+        link: item.link,
+        pubDate: item.pubDate,
+        trusted: isTrusted,
+        unreliable: isUnreliable,
+        similarity: parseFloat(sim.toFixed(3))
+      });
+      
+      if (isTrusted) result.trusted_count++;
+      if (isUnreliable) result.unreliable_count++;
+    }
+  }
+
+  result.corroboration_score = parseFloat(Math.min(1.0, result.trusted_count / 3.0).toFixed(4));
+  return result;
+}
+
+function combineMlAndCorroboration(mlIsFake, mlConfidence, corroboration) {
+  const cs = corroboration.corroboration_score;
+  const mlP = mlConfidence / 100.0;
+  const found = corroboration.search_success;
+
+  let finalFake = false;
+  let finalP = 0.0;
+  let verdictReason = "";
+  let mlOverridden = false;
+
+  if (!found) {
+    finalFake = mlIsFake;
+    if (!mlIsFake) {
+      finalP = Math.min(0.75, mlP);
+    } else {
+      finalP = mlP;
+    }
+    verdictReason = "search_unavailable";
+  } else if (cs >= 0.67) {
+    finalFake = false;
+    finalP = Math.min(0.97, 0.6 + cs * 0.37);
+    mlOverridden = mlIsFake;
+    verdictReason = "strongly_corroborated";
+  } else if (cs >= 0.33) {
+    if (mlIsFake) {
+      finalFake = true;
+      finalP = mlP * 0.65;
+      verdictReason = "weak_corroboration_ml_fake";
+    } else {
+      finalFake = false;
+      finalP = Math.min(0.92, mlP * 0.6 + 0.35);
+      verdictReason = "partially_corroborated";
+    }
+  } else {
+    if (mlIsFake) {
+      finalFake = true;
+      finalP = mlP;
+      verdictReason = "not_found_ml_fake";
+    } else {
+      finalFake = false;
+      finalP = Math.max(0.50, mlP * 0.70);
+      verdictReason = "not_found_ml_real";
+    }
+  }
+
+  const finalConfidence = Math.max(50, Math.min(97, Math.floor(finalP * 100)));
+
+  let label = "";
+  if (finalFake && finalConfidence < 68) {
+    label = "UNCERTAIN — POSSIBLE FAKE";
+  } else if (finalFake) {
+    label = "LIKELY FAKE";
+  } else if (!finalFake && finalConfidence < 68) {
+    label = "UNCERTAIN — POSSIBLY REAL";
+  } else {
+    label = "LIKELY REAL";
+  }
+
+  return {
+    prediction: label,
+    isFake: finalFake,
+    confidence: finalConfidence,
+    mlOverridden: mlOverridden,
+    verdictReason: verdictReason,
+    corroborationScore: parseFloat(cs.toFixed(4)),
+    trustedSources: corroboration.trusted_count,
+    searchQuery: corroboration.query,
+    searchSuccess: corroboration.search_success,
+    topMatches: corroboration.matches.slice(0, 5)
+  };
+}
 
 function heuristicScore(text) {
   const lower = text.toLowerCase();
@@ -133,31 +419,52 @@ function getSentiment(text) {
   return { score, label: "Neutral" };
 }
 
-function buildFactors(isFake, isUncertain, heuristic, decisionVal, text) {
+function buildFactors(isFake, isUncertain, heuristic, text, corrData) {
   const lower = text.toLowerCase();
   const factors = [];
 
-  if (isUncertain) {
-    factors.push({ label: "Content falls in ambiguous zone — low confidence prediction", type: "warning" });
+  // ── Corroboration factor ──────────────────────────────────────────────────
+  if (corrData && corrData.searchSuccess) {
+    const trusted = corrData.trustedSources || 0;
+    if (trusted >= 2) {
+      factors.push({
+        label: `Confirmed by ${trusted} trusted news outlets via live search`,
+        type: "success"
+      });
+    } else if (trusted === 1) {
+      factors.push({
+        label: "Partially corroborated — 1 trusted outlet found a matching story",
+        type: "warning"
+      });
+    } else {
+      factors.push({
+        label: "No trusted outlet found a matching story in live search",
+        type: isFake ? "error" : "warning"
+      });
+    }
+  } else if (corrData && !corrData.searchSuccess) {
+    factors.push({
+      label: "Live search unavailable — verdict based on ML model only",
+      type: "warning"
+    });
   }
 
+  // ── Uncertainty flag ──────────────────────────────────────────────────────
+  if (isUncertain) {
+    factors.push({ label: "Content falls in ambiguous zone — low confidence", type: "warning" });
+  }
+
+  // ── ML / heuristic factors ────────────────────────────────────────────────
   if (isFake || heuristic > 0.1) {
     if (/!!!+/.test(text) || /\b[A-Z]{4,}\b.*\b[A-Z]{4,}\b/.test(text)) {
-      factors.push({ label: "Sensationalist formatting detected (ALL-CAPS / multiple !!!)", type: "error" });
+      factors.push({ label: "Sensationalist formatting (ALL-CAPS / multiple !!!)", type: "error" });
     } else {
       factors.push({ label: "Linguistic patterns associated with low-credibility content", type: "error" });
     }
-
     if (/\b(deep state|globalists?|cabal|illuminati|sheeple)\b/i.test(lower)) {
-      factors.push({ label: "Conspiracy framing language present", type: "error" });
+      factors.push({ label: "Conspiracy framing language detected", type: "error" });
     } else {
-      factors.push({ label: "Emotional and persuasive framing techniques detected", type: "warning" });
-    }
-
-    if (/\b(hidden|secret|exposed|cover.?up|they don't want)\b/i.test(lower)) {
-      factors.push({ label: "\"Hidden truth\" narrative structure identified", type: "warning" });
-    } else {
-      factors.push({ label: "Low density of verifiable, attributed facts", type: "warning" });
+      factors.push({ label: "Emotional persuasion techniques present", type: "warning" });
     }
   } else {
     if (/\b(reuters|associated press|bbc|bloomberg|afp)\b/i.test(lower)) {
@@ -165,18 +472,8 @@ function buildFactors(isFake, isUncertain, heuristic, decisionVal, text) {
     } else {
       factors.push({ label: "Writing style consistent with professional journalism", type: "success" });
     }
-
     if (/\b(said|reported|confirmed|according to)\b/i.test(lower)) {
       factors.push({ label: "Quotes and attributions follow journalistic convention", type: "success" });
-    } else {
-      factors.push({ label: "Factual structure aligns with verifiable reporting", type: "success" });
-    }
-
-    factors.push({ label: "Low sensationalism and bias index", type: "success" });
-
-    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-    if (wordCount > 50) {
-      factors.push({ label: "Sufficient context and detail present", type: "success" });
     }
   }
 
@@ -185,7 +482,7 @@ function buildFactors(isFake, isUncertain, heuristic, decisionVal, text) {
 
 // @route   POST api/detect/analyze
 // @desc    Analyze news content for authenticity using JS ML model
-router.post('/analyze', (req, res) => {
+router.post('/analyze', async (req, res) => {
   const { content } = req.body;
 
   if (!content || !content.trim()) {
@@ -239,57 +536,76 @@ router.post('/analyze', (req, res) => {
 
     const lowerUncertain = FAKE_THRESHOLD - UNCERTAIN_BAND;
     const upperUncertain = FAKE_THRESHOLD + UNCERTAIN_BAND;
-    const isUncertain = combined > lowerUncertain && combined < upperUncertain;
+    const isUncertainML = combined > lowerUncertain && combined < upperUncertain;
 
-    let isFake = false;
-    if (isUncertain) {
-      isFake = hScore > 0.1;
+    let mlIsFake = false;
+    if (isUncertainML) {
+      mlIsFake = hScore > 0.1;
     } else {
-      isFake = combined > FAKE_THRESHOLD;
+      mlIsFake = combined > FAKE_THRESHOLD;
     }
 
     // ── CONFIDENCE ────────────────────────────────────────────────────────────
     const distance = Math.abs(combined - FAKE_THRESHOLD);
     const rawConf = 1 / (1 + Math.exp(-distance * 1.5));
-    let confidence = Math.floor(rawConf * 100);
+    let mlConfidence = 0;
 
-    if (isUncertain) {
-      confidence = Math.max(50, Math.min(65, confidence));
+    if (isUncertainML) {
+      mlConfidence = Math.max(50, Math.min(65, Math.floor(rawConf * 100)));
     } else {
-      confidence = Math.max(70, Math.min(97, confidence));
+      mlConfidence = Math.max(70, Math.min(97, Math.floor(rawConf * 100)));
     }
+
+    // ── REAL-TIME CORROBORATION ──────────────────────────────────────────────
+    const corrRaw = await corroborate(content);
+    const combinedResult = combineMlAndCorroboration(mlIsFake, mlConfidence, corrRaw);
     
-    let trustScore, sourceCredibility, predictionLabel, explanation;
-    
+    const isFake = combinedResult.isFake;
+    const confidence = combinedResult.confidence;
+    const prediction = combinedResult.prediction;
+    const isUncertain = confidence < 68;
+
+    let trustScore, sourceCredibility, explanation;
     const randInt = (min, max) => Math.floor(Math.random() * (max - min)) + min;
 
     if (isFake) {
       trustScore = Math.max(10, Math.min(42, 100 - confidence + randInt(-4, 4)));
       sourceCredibility = Math.max(12, Math.min(45, 100 - confidence + randInt(-8, 8)));
-      if (isUncertain) {
-        predictionLabel = "UNCERTAIN — POSSIBLE FAKE";
-        explanation = "The AI could not confidently classify this content. Some indicators suggest possible misinformation, but the signal is weak. We recommend verifying claims through multiple trusted news sources before sharing.";
-      } else {
-        predictionLabel = "LIKELY FAKE";
-        explanation = "The AI detected multiple indicators of potential misinformation. The text contains linguistic patterns and framing structures commonly associated with false or misleading news. Cross-reference with trusted outlets before sharing.";
-      }
+      explanation = "The AI detected multiple indicators of potential misinformation. " +
+        "The text contains linguistic patterns and framing structures commonly " +
+        "associated with false or misleading news. " +
+        (combinedResult.trustedSources === 0 ? "No trusted news outlet was found reporting this story. " : "") +
+        "Cross-reference with trusted outlets before sharing.";
     } else {
       trustScore = Math.max(58, Math.min(95, confidence + randInt(-5, 5)));
       sourceCredibility = Math.max(60, Math.min(97, confidence + randInt(-5, 5)));
-      if (isUncertain) {
-        predictionLabel = "UNCERTAIN — POSSIBLY REAL";
-        explanation = "The AI leans toward classifying this as credible content, but with low confidence. The text lacks strong misinformation markers, though it also lacks strong credibility signals. Always verify important claims independently.";
+      const trustedN = combinedResult.trustedSources || 0;
+      if (trustedN >= 2) {
+        explanation = `Live search found ${trustedN} trusted news outlets reporting this story, strongly supporting its authenticity. The AI model also indicates credible writing patterns.`;
+      } else if (trustedN === 1) {
+        explanation = "One trusted outlet was found reporting a similar story. The AI model also indicates credible writing patterns. Verify through additional sources for full confidence.";
       } else {
-        predictionLabel = "LIKELY REAL";
-        explanation = "The AI analysis indicates this content is likely authentic. The sentence structure, vocabulary, and style are consistent with credible journalism. We still recommend verifying important claims through multiple independent sources.";
+        explanation = "The AI analysis indicates this content is likely authentic based on linguistic patterns. However, no matching story was found in live news search — verify through trusted outlets independently.";
       }
     }
     
     const sentiment = getSentiment(content);
-    const factors = buildFactors(isFake, isUncertain, hScore, decisionVal, content);
+    const factors = buildFactors(isFake, isUncertain, hScore, content, combinedResult);
+
+    const topMatches = [];
+    if (corrRaw && corrRaw.matches) {
+      for (const m of corrRaw.matches.slice(0, 4)) {
+        topMatches.push({
+          title: m.title,
+          source: m.source,
+          trusted: m.trusted,
+          link: m.link || ""
+        });
+      }
+    }
     
     const result = {
-      prediction: predictionLabel,
+      prediction: prediction,
       isFake: isFake,
       isUncertain: isUncertain,
       confidence: confidence,
@@ -298,12 +614,14 @@ router.post('/analyze', (req, res) => {
       sourceCredibility: sourceCredibility,
       factors: factors,
       explanation: explanation,
-      // Debug info
-      _debug: {
-        decisionVal: parseFloat(decisionVal.toFixed(4)),
-        heuristicScore: parseFloat(hScore.toFixed(4)),
-        combined: parseFloat(combined.toFixed(4)),
-        threshold: FAKE_THRESHOLD
+      corroboration: {
+        available: true,
+        searchSuccess: corrRaw.search_success,
+        trustedSources: combinedResult.trustedSources,
+        score: combinedResult.corroborationScore,
+        searchQuery: corrRaw.query,
+        topMatches: topMatches,
+        mlOverridden: combinedResult.mlOverridden
       }
     };
     
