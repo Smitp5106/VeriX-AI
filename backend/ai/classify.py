@@ -229,7 +229,7 @@ def main():
 
         if CORROBORATION_AVAILABLE:
             corr_raw  = corroborate(text)
-            combined  = combine_ml_and_corroboration(ml_is_fake, ml_confidence, corr_raw)
+            combined  = combine_ml_and_corroboration(ml_is_fake, ml_confidence, corr_raw, text)
             is_fake    = combined["isFake"]
             confidence = combined["confidence"]
             prediction = combined["prediction"]

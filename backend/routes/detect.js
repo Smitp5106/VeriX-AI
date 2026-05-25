@@ -199,7 +199,8 @@ const SYNONYM_GROUPS = [
 const BLOCKER_WORDS = new Set([
   "but", "however", "although", "condolences", "tribute", "mourns", "mourn", 
   "denies", "claims", "fake", "false", "hoax", "rumor", "not", "never", "refutes",
-  "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief"
+  "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief",
+  "says", "reports", "report", "warns", "warned"
 ]);
 
 const STOP_WORDS = new Set([
@@ -235,6 +236,18 @@ function passesTwoLayerMatching(claim, title) {
   const titleTokens = getTokens(cleanTitle);
 
   if (claimTokens.length === 0 || titleTokens.length === 0) return false;
+
+  // --- Symmetric Blocker Check ---
+  const SYMMETRIC_BLOCKERS = [
+    "condolences", "tribute", "tributes", "sympathy", "mourn", "mourns", "mourned", "grief",
+    "denies", "refutes", "debunks", "debunked", "hoax", "hoaxes", "fake", "false", "rumor", "rumors", "rumours",
+    "threat", "threats"
+  ];
+  for (const blocker of SYMMETRIC_BLOCKERS) {
+    if (titleTokens.includes(blocker) && !claimTokens.includes(blocker)) {
+      return false;
+    }
+  }
 
   // --- LAYER 1: Semantic Recall ---
   const claimKeywords = claimTokens.filter(w => w.length > 3 && !STOP_WORDS.has(w));
@@ -509,7 +522,7 @@ async function corroborate(text, maxResults = 10) {
   return result;
 }
 
-function combineMlAndCorroboration(mlIsFake, mlConfidence, corroboration) {
+function combineMlAndCorroboration(mlIsFake, mlConfidence, corroboration, originalText) {
   const cs = corroboration.corroboration_score;
   const mlP = mlConfidence / 100.0;
   const found = corroboration.search_success;
@@ -548,9 +561,20 @@ function combineMlAndCorroboration(mlIsFake, mlConfidence, corroboration) {
       finalP = mlP;
       verdictReason = "not_found_ml_fake";
     } else {
-      finalFake = false;
-      finalP = Math.max(0.50, mlP * 0.70);
-      verdictReason = "not_found_ml_real";
+      // Sensational or extreme claim check: if no trusted source confirms it, it is likely fake
+      const textLower = (originalText || corroboration.searchQuery || "").toLowerCase();
+      const hasExtremeClaim = /\b(killed|died|death|assassinated|arrested|coup|resigns|resigned|dead|murdered|slain)\b/i.test(textLower);
+      
+      if (hasExtremeClaim) {
+        finalFake = true;
+        finalP = 0.72; // Mark as fake with 72% confidence (LIKELY FAKE)
+        mlOverridden = true;
+        verdictReason = "not_found_sensational_claim";
+      } else {
+        finalFake = false;
+        finalP = Math.max(0.50, mlP * 0.70);
+        verdictReason = "not_found_ml_real";
+      }
     }
   }
 
@@ -795,7 +819,7 @@ router.post('/analyze', optionalAuth, async (req, res) => {
 
     // ── REAL-TIME CORROBORATION ──────────────────────────────────────────────
     const corrRaw = await corroborate(content);
-    const combinedResult = combineMlAndCorroboration(mlIsFake, mlConfidence, corrRaw);
+    const combinedResult = combineMlAndCorroboration(mlIsFake, mlConfidence, corrRaw, content);
     
     const isFake = combinedResult.isFake;
     const confidence = combinedResult.confidence;

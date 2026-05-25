@@ -128,7 +128,8 @@ SYNONYM_GROUPS = [
 BLOCKER_WORDS = {
     "but", "however", "although", "condolences", "tribute", "mourns", "mourn", 
     "denies", "claims", "fake", "false", "hoax", "rumor", "not", "never", "refutes",
-    "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief"
+    "debunks", "debunked", "unrelated", "misleading", "tributes", "sympathy", "grief",
+    "says", "reports", "report", "warns", "warned"
 }
 
 STOP_WORDS = {
@@ -164,6 +165,16 @@ def passes_two_layer_matching(claim: str, title: str) -> bool:
 
     if not claim_tokens or not title_tokens:
         return False
+
+    # --- Symmetric Blocker Check ---
+    SYMMETRIC_BLOCKERS = [
+        "condolences", "tribute", "tributes", "sympathy", "mourn", "mourns", "mourned", "grief",
+        "denies", "refutes", "debunks", "debunked", "hoax", "hoaxes", "fake", "false", "rumor", "rumors", "rumours",
+        "threat", "threats"
+    ]
+    for blocker in SYMMETRIC_BLOCKERS:
+        if blocker in title_tokens and blocker not in claim_tokens:
+            return False
 
     # --- LAYER 1: Semantic Recall ---
     claim_keywords = [w for w in claim_tokens if len(w) > 3 and w not in STOP_WORDS]
@@ -409,6 +420,7 @@ def combine_ml_and_corroboration(
     ml_is_fake:          bool,
     ml_confidence:       int,         # 0–100
     corroboration:       dict,        # output of corroborate()
+    original_text:       str = "",
 ) -> dict:
     """
     Merge the ML classifier result with real-time corroboration evidence.
@@ -457,10 +469,22 @@ def combine_ml_and_corroboration(
             final_p    = ml_p
             verdict_reason = "not_found_ml_fake"
         else:
-            # ML says real but nobody reported it — reduce confidence
-            final_fake = False
-            final_p    = max(0.50, ml_p * 0.70)
-            verdict_reason = "not_found_ml_real"
+            # Sensational or extreme claim check: if no trusted source confirms it, it is likely fake
+            text_lower = (original_text or corroboration.get("query", "") or "").lower()
+            has_extreme_claim = any(
+                ext in text_lower for ext in 
+                ["killed", "died", "death", "assassinated", "arrested", "coup", "resigns", "resigned", "dead", "murdered", "slain"]
+            )
+            if has_extreme_claim:
+                final_fake = True
+                final_p = 0.72  # Mark as fake with 72% confidence (LIKELY FAKE)
+                ml_overridden = True
+                verdict_reason = "not_found_sensational_claim"
+            else:
+                # ML says real but nobody reported it — reduce confidence
+                final_fake = False
+                final_p    = max(0.50, ml_p * 0.70)
+                verdict_reason = "not_found_ml_real"
 
     final_confidence = max(50, min(97, int(final_p * 100)))
 
