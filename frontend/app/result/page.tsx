@@ -41,6 +41,20 @@ export interface AnalysisResult {
     type: "success" | "warning" | "error";
   }>;
   explanation: string;
+  corroboration?: {
+    available: boolean;
+    searchSuccess: boolean;
+    trustedSources: number;
+    score: number;
+    searchQuery: string;
+    topMatches: Array<{
+      title: string;
+      source: string;
+      trusted: boolean;
+      link: string;
+    }>;
+    mlOverridden: boolean;
+  };
 }
 
 export default function ResultPage() {
@@ -271,27 +285,40 @@ export default function ResultPage() {
               
               {/* Related News */}
               <div className="p-6 rounded-2xl bg-card border border-border">
-                <h3 className="font-semibold mb-4">Related Fact Checks</h3>
+                <h3 className="font-semibold mb-4 font-mono text-sm tracking-wide text-muted-foreground">POSSIBLE REAL NEWS REFERENCES</h3>
                 <div className="space-y-3">
-                  {[
-                    { title: "Similar claim debunked by Snopes", source: "Snopes" },
-                    { title: "Reuters fact check on related topic", source: "Reuters" },
-                    { title: "AP News verification article", source: "AP News" },
-                  ].map((item, i) => (
-                    <a
-                      key={i}
-                      href="#"
-                      className="block p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-start gap-2">
-                        <ExternalLink className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
-                        <div>
-                          <div className="text-sm font-medium mb-1">{item.title}</div>
-                          <div className="text-xs text-muted-foreground">{item.source}</div>
+                  {result.corroboration?.topMatches && result.corroboration.topMatches.length > 0 ? (
+                    result.corroboration.topMatches.map((item, i) => (
+                      <a
+                        key={i}
+                        href={item.link || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 rounded-xl hover:bg-muted/50 transition-all duration-300 border border-border/40 hover:border-border group"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <ExternalLink className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium mb-1 leading-snug text-foreground/90 group-hover:text-foreground transition-colors line-clamp-3">
+                              {item.title}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-xs text-muted-foreground font-semibold">{item.source}</span>
+                              {item.trusted && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-mono tracking-wider font-bold">
+                                  TRUSTED
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </a>
-                  ))}
+                      </a>
+                    ))
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-6 text-center border border-dashed border-border/80 rounded-xl">
+                      No matching news references found in live searches.
+                    </div>
+                  )}
                 </div>
               </div>
               

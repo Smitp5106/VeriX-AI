@@ -2,6 +2,43 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const History = require('../models/History');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'verix_ai_secret_key_123_456_789';
+
+// Middleware helper to check optional auth (for saving history if logged in)
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = decoded;
+    } catch (err) {
+      console.warn('Invalid auth token in optional auth middleware:', err.message);
+    }
+  }
+  next();
+};
+
+// Middleware helper to require auth (for fetching history)
+const requireAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'No authentication token, authorization denied' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error('JWT verification error in requireAuth:', err.message);
+    return res.status(401).json({ message: 'Token is not valid or has expired' });
+  }
+};
+
 
 // Load model data synchronously on start
 let modelData = null;
@@ -482,7 +519,7 @@ function buildFactors(isFake, isUncertain, heuristic, text, corrData) {
 
 // @route   POST api/detect/analyze
 // @desc    Analyze news content for authenticity using JS ML model
-router.post('/analyze', async (req, res) => {
+router.post('/analyze', optionalAuth, async (req, res) => {
   const { content } = req.body;
 
   if (!content || !content.trim()) {
@@ -625,10 +662,39 @@ router.post('/analyze', async (req, res) => {
       }
     };
     
+    // Save to history database if user is logged in
+    if (req.user && req.user.id) {
+      try {
+        const newHistory = new History({
+          user: req.user.id,
+          content: content,
+          result: result
+        });
+        await newHistory.save();
+        console.log(`Saved analysis history for user ${req.user.id}`);
+      } catch (historyErr) {
+        console.error('Failed to save user history:', historyErr);
+      }
+    }
+
     res.json(result);
   } catch (err) {
     console.error('JS Inference execution error:', err);
     res.status(500).json({ message: 'Error performing AI analysis', error: err.message });
+  }
+});
+
+// @route   GET api/detect/history
+// @desc    Get logged in user's analysis history
+router.get('/history', requireAuth, async (req, res) => {
+  try {
+    const history = await History.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(history);
+  } catch (err) {
+    console.error('Error fetching history:', err);
+    res.status(500).json({ message: 'Error retrieving analysis history', error: err.message });
   }
 });
 

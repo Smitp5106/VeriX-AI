@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/utils";
+import Link from "next/link";
 
 type ContentType = "headline" | "article" | "social";
 
@@ -30,6 +31,51 @@ export default function DetectPage() {
   const [content, setContent] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Guest and User State
+  const [guestTries, setGuestTries] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+    
+    if (token && storedUser) {
+      setIsLoggedIn(true);
+      fetchHistory(token);
+    } else {
+      setIsLoggedIn(false);
+      // Track guest tries
+      const tries = localStorage.getItem("verix_guest_tries");
+      if (tries) {
+        setGuestTries(parseInt(tries, 10));
+      } else {
+        localStorage.setItem("verix_guest_tries", "0");
+        setGuestTries(0);
+      }
+    }
+  }, []);
+
+  const fetchHistory = async (token: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`${API_URL}/api/detect/history`, {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!content.trim()) return;
@@ -38,11 +84,17 @@ export default function DetectPage() {
     setError(null);
     
     try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_URL}/api/detect/analyze`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({ content }),
       });
       
@@ -56,6 +108,13 @@ export default function DetectPage() {
       localStorage.setItem("verix_analysis_content", content);
       localStorage.setItem("verix_analysis_type", contentType);
       localStorage.setItem("verix_analysis_result", JSON.stringify(data));
+
+      // Increment guest tries if not logged in
+      if (!token) {
+        const nextTries = guestTries + 1;
+        localStorage.setItem("verix_guest_tries", nextTries.toString());
+        setGuestTries(nextTries);
+      }
       
       router.push("/result");
     } catch (err: any) {
@@ -131,7 +190,32 @@ export default function DetectPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="space-y-6"
           >
-            <div className="p-8 rounded-2xl bg-card border border-border">
+            <div className="p-8 rounded-2xl bg-card border border-border relative overflow-hidden">
+              {/* Guest Limit Overlay */}
+              {!isLoggedIn && guestTries >= 3 && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-md z-20 flex flex-col items-center justify-center text-center p-6 transition-all duration-300">
+                  <div className="p-4 rounded-full bg-destructive/10 text-destructive mb-4">
+                    <Shield className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-2">Guest Limit Reached</h3>
+                  <p className="text-muted-foreground max-w-md mb-6 text-sm leading-relaxed">
+                    You have used your 3 free guest analyses. Sign up or log in to get unlimited verification attempts and save your analysis history.
+                  </p>
+                  <div className="flex gap-4">
+                    <Link href="/signup">
+                      <Button className="bg-foreground hover:bg-foreground/90 text-background rounded-full px-6 h-11">
+                        Get Unlimited Access
+                      </Button>
+                    </Link>
+                    <Link href="/login">
+                      <Button variant="outline" className="rounded-full px-6 h-11">
+                        Sign In
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+
               <Label htmlFor="content" className="text-lg font-medium mb-4 block">
                 {currentType.label}
               </Label>
@@ -143,6 +227,7 @@ export default function DetectPage() {
                   onChange={(e) => setContent(e.target.value)}
                   placeholder={currentType.placeholder}
                   className="h-14 text-lg rounded-xl"
+                  disabled={!isLoggedIn && guestTries >= 3}
                 />
               ) : (
                 <Textarea
@@ -151,6 +236,7 @@ export default function DetectPage() {
                   onChange={(e) => setContent(e.target.value)}
                   placeholder={currentType.placeholder}
                   className="min-h-[200px] text-base rounded-xl resize-none"
+                  disabled={!isLoggedIn && guestTries >= 3}
                 />
               )}
 
@@ -169,7 +255,7 @@ export default function DetectPage() {
                 
                 <Button
                   onClick={handleAnalyze}
-                  disabled={!content.trim() || isAnalyzing}
+                  disabled={(!isLoggedIn && guestTries >= 3) || !content.trim() || isAnalyzing}
                   className="bg-foreground hover:bg-foreground/90 text-background rounded-full px-8 h-12"
                 >
                   {isAnalyzing ? (
@@ -246,6 +332,91 @@ export default function DetectPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* User History List */}
+            {isLoggedIn && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.25 }}
+                className="mt-8 p-6 rounded-2xl bg-card border border-border"
+              >
+                <div className="flex items-center justify-between mb-4 border-b border-border/50 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Scan className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="font-semibold text-lg font-mono text-sm tracking-wider uppercase text-muted-foreground">Verification History</h3>
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+                    {history.length} Saved {history.length === 1 ? "Analysis" : "Analyses"}
+                  </span>
+                </div>
+
+                {isLoadingHistory ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground font-mono">Loading history...</span>
+                  </div>
+                ) : history.length > 0 ? (
+                  <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                    {history.map((item) => {
+                      const isFake = item.result?.isFake;
+                      const prediction = item.result?.prediction || "Unknown";
+                      const confidence = item.result?.confidence || 0;
+                      const dateStr = new Date(item.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+
+                      return (
+                        <div
+                          key={item._id}
+                          className="p-4 rounded-xl border border-border/40 hover:border-border/80 bg-muted/20 hover:bg-muted/40 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-foreground/90 font-medium line-clamp-1 mb-1 group-hover:text-foreground transition-colors">
+                              {item.content}
+                            </p>
+                            <span className="text-xs text-muted-foreground font-mono">{dateStr}</span>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-mono font-bold tracking-wider border ${
+                              isFake 
+                                ? "bg-destructive/10 text-destructive border-destructive/20" 
+                                : "bg-success/10 text-success border-success/20"
+                            }`}>
+                              {prediction.replace(/LIKELY\s+|UNCERTAIN\s+—\s+POSSIBLE\s+/g, '')} ({confidence}%)
+                            </span>
+                            <Button
+                              onClick={() => {
+                                localStorage.setItem("verix_analysis_content", item.content);
+                                localStorage.setItem("verix_analysis_type", "article");
+                                localStorage.setItem("verix_analysis_result", JSON.stringify(item.result));
+                                router.push("/result");
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-full hover:bg-foreground hover:text-background h-8 transition-all duration-300"
+                            >
+                              View Result
+                              <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 border border-dashed border-border/80 rounded-xl">
+                    <p className="text-sm text-muted-foreground">You haven't analyzed any content yet.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Your past verifications will appear here.</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
           </motion.div>
           
           {/* Features */}
