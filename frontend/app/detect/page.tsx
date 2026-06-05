@@ -11,19 +11,22 @@ import { Footer } from "@/components/verix/footer";
 import { 
   Scan, 
   FileText, 
-  MessageSquare, 
   Newspaper,
   Loader2,
   ArrowRight,
   Shield,
   Zap,
-  Globe
+  Globe,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  Sparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/utils";
 import Link from "next/link";
 
-type ContentType = "headline" | "article" | "social";
+type ContentType = "headline" | "article" | "image";
 
 export default function DetectPage() {
   const router = useRouter();
@@ -31,6 +34,23 @@ export default function DetectPage() {
   const [content, setContent] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Image Upload and OCR State
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
+
+  // Reset states on tab change
+  useEffect(() => {
+    setContent("");
+    setImageFile(null);
+    setImagePreview(null);
+    setOcrProgress(0);
+    setIsExtracting(false);
+    setError(null);
+  }, [contentType]);
   
   // Guest and User State
   const [guestTries, setGuestTries] = useState(0);
@@ -124,10 +144,73 @@ export default function DetectPage() {
     }
   };
 
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith("image/")) {
+        setImageFile(file);
+        setImagePreview(URL.createObjectURL(file));
+        runOcr(file);
+      } else {
+        setError("Only image files (PNG, JPG, WEBP) are supported.");
+      }
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+      runOcr(file);
+    }
+  };
+
+  const runOcr = async (file: File) => {
+    setIsExtracting(true);
+    setOcrProgress(0);
+    setError(null);
+    setContent("");
+    try {
+      const Tesseract = (await import("tesseract.js")).default;
+      const result = await Tesseract.recognize(file, "eng", {
+        logger: (m) => {
+          if (m.status === "recognizing text") {
+            setOcrProgress(Math.floor(m.progress * 100));
+          }
+        },
+      });
+      const extractedText = result.data.text.trim();
+      if (!extractedText) {
+        throw new Error("No readable text was found in the image. Please upload a clear image of a headline or article.");
+      }
+      setContent(extractedText);
+    } catch (err: any) {
+      console.error("OCR Error:", err);
+      setError(err.message || "Failed to extract text from the image.");
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const contentTypes = [
     { id: "headline" as const, label: "News Headline", icon: Newspaper, placeholder: "Enter a news headline to verify..." },
     { id: "article" as const, label: "Full Article", icon: FileText, placeholder: "Paste the full article text here..." },
-    { id: "social" as const, label: "Social Media Post", icon: MessageSquare, placeholder: "Paste a social media post or tweet..." },
+    { id: "image" as const, label: "Upload Image", icon: ImageIcon, placeholder: "Upload an image containing news text..." },
   ];
 
   const currentType = contentTypes.find(t => t.id === contentType)!;
@@ -216,28 +299,139 @@ export default function DetectPage() {
                 </div>
               )}
 
-              <Label htmlFor="content" className="text-lg font-medium mb-4 block">
-                {currentType.label}
-              </Label>
-              
-              {contentType === "headline" ? (
-                <Input
-                  id="content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder={currentType.placeholder}
-                  className="h-14 text-lg rounded-xl"
-                  disabled={!isLoggedIn && guestTries >= 3}
-                />
+              {contentType === "image" ? (
+                <div className="space-y-6">
+                  {!imagePreview ? (
+                    <div
+                      onDragEnter={handleDrag}
+                      onDragOver={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDrop={handleDrop}
+                      className={`relative flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-2xl transition-all duration-300 ${
+                        dragActive
+                          ? "border-foreground bg-foreground/5 scale-[1.01]"
+                          : "border-border hover:border-foreground/50 hover:bg-card/50"
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        id="image-upload"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        disabled={!isLoggedIn && guestTries >= 3}
+                      />
+                      <label
+                        htmlFor="image-upload"
+                        className="flex flex-col items-center justify-center cursor-pointer text-center"
+                      >
+                        <div className="p-4 rounded-full bg-foreground/5 mb-4 transition-transform duration-300">
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <span className="text-lg font-medium mb-1">
+                          Drag & drop news image here
+                        </span>
+                        <span className="text-sm text-muted-foreground mb-4">
+                          or click to browse from device
+                        </span>
+                        <span className="text-xs text-muted-foreground/60 border border-border/50 px-3 py-1 rounded-full">
+                          Supports PNG, JPG, WEBP
+                        </span>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Image Preview Panel */}
+                      <div className="relative rounded-2xl overflow-hidden border border-border bg-card flex flex-col items-center justify-center p-4 min-h-[200px]">
+                        <img
+                          src={imagePreview}
+                          alt="Uploaded news source"
+                          className="max-h-[220px] rounded-xl object-contain shadow-md"
+                        />
+                        <button
+                          onClick={() => {
+                            setImageFile(null);
+                            setImagePreview(null);
+                            setContent("");
+                            setOcrProgress(0);
+                            setError(null);
+                          }}
+                          className="absolute top-4 right-4 p-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-full transition-colors duration-200"
+                          title="Remove image"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Extracted Text Panel */}
+                      <div className="flex flex-col h-full justify-between">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-yellow-500 animate-pulse" />
+                              Extracted Text
+                            </span>
+                            {isExtracting && (
+                              <span className="text-xs text-muted-foreground font-mono">
+                                Scanning... {ocrProgress}%
+                              </span>
+                            )}
+                          </div>
+
+                          {isExtracting ? (
+                            <div className="flex flex-col items-center justify-center min-h-[140px] bg-muted/20 border border-border rounded-xl p-6">
+                              <Loader2 className="w-8 h-8 animate-spin mb-3 text-muted-foreground" />
+                              <div className="w-full max-w-[150px] h-1 bg-muted rounded-full overflow-hidden mb-2">
+                                <div
+                                  className="h-full bg-foreground transition-all duration-300"
+                                  style={{ width: `${ocrProgress}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-muted-foreground font-mono">
+                                Extracting text from image...
+                              </span>
+                            </div>
+                          ) : (
+                            <Textarea
+                              id="content"
+                              value={content}
+                              onChange={(e) => setContent(e.target.value)}
+                              placeholder="Text extracted from image will appear here. You can edit it if needed."
+                              className="min-h-[140px] text-base rounded-xl resize-none"
+                              disabled={!isLoggedIn && guestTries >= 3}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <Textarea
-                  id="content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder={currentType.placeholder}
-                  className="min-h-[200px] text-base rounded-xl resize-none"
-                  disabled={!isLoggedIn && guestTries >= 3}
-                />
+                <>
+                  <Label htmlFor="content" className="text-lg font-medium mb-4 block">
+                    {currentType.label}
+                  </Label>
+                  
+                  {contentType === "headline" ? (
+                    <Input
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder={currentType.placeholder}
+                      className="h-14 text-lg rounded-xl"
+                      disabled={!isLoggedIn && guestTries >= 3}
+                    />
+                  ) : (
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder={currentType.placeholder}
+                      className="min-h-[200px] text-base rounded-xl resize-none"
+                      disabled={!isLoggedIn && guestTries >= 3}
+                    />
+                  )}
+                </>
               )}
 
               {error && (
@@ -255,7 +449,7 @@ export default function DetectPage() {
                 
                 <Button
                   onClick={handleAnalyze}
-                  disabled={(!isLoggedIn && guestTries >= 3) || !content.trim() || isAnalyzing}
+                  disabled={(!isLoggedIn && guestTries >= 3) || !content.trim() || isAnalyzing || isExtracting}
                   className="bg-foreground hover:bg-foreground/90 text-background rounded-full px-8 h-12"
                 >
                   {isAnalyzing ? (
