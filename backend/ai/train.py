@@ -10,7 +10,7 @@ from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
 # Paths
-downloads_dir = r"C:\Users\HP\Downloads"
+downloads_dir = r"C:\Users\HP\Desktop\VeriX-AI"
 fake_zip = os.path.join(downloads_dir, "dataset", "Fake.csv.zip")
 true_zip = os.path.join(downloads_dir, "True.csv.zip")
 
