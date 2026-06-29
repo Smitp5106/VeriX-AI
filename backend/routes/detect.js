@@ -193,7 +193,12 @@ const SYNONYM_GROUPS = [
   ["arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests"],
   ["condolences", "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"],
   ["bill", "law", "legislation", "act"],
-  ["ban", "forbid", "prohibit", "illegal", "outlaw", "banned", "bans"]
+  ["ban", "forbid", "prohibit", "illegal", "outlaw", "banned", "bans"],
+  ["says", "tells", "asks", "forces", "requires", "requests", "demands", "mandates", "ordered", "orders", "directive", "rule", "rules", "calls", "called", "directives", "tells", "tell", "ask", "force", "require", "request", "demand", "mandate", "order", "call"],
+  ["back", "return", "leave", "depart", "go", "outside", "abroad", "exit", "returns", "leaves", "departs", "goes", "exits"],
+  ["temporary", "non-immigrant", "nonimmigrant"],
+  ["announced", "announces", "revealed", "reveals", "unveiled", "unveils", "introduced", "introduces", "plans", "planned", "announcement", "launch", "launched", "launches", "unveil", "unveiled", "introduce", "plan"],
+  ["country", "countries", "nation", "nations", "homeland", "home"]
 ];
 
 const BLOCKER_WORDS = new Set([
