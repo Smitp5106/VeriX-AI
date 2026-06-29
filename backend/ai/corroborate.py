@@ -153,6 +153,14 @@ def get_synonyms(word: str) -> list[str]:
             syns.update(group)
     return list(syns)
 
+KNOWN_ACTIONS: set[str] = {
+    "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
+    "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
+    "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
+    "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
+    "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+}
+
 def passes_two_layer_matching(claim: str, title: str) -> bool:
     clean_claim = re.sub(r'https?://\S+', '', claim)
     clean_claim = re.sub(r'[^\w\s]', ' ', clean_claim)
@@ -176,8 +184,16 @@ def passes_two_layer_matching(claim: str, title: str) -> bool:
         if blocker in title_tokens and blocker not in claim_tokens:
             return False
 
+    # Helper to extract capitalized proper nouns from raw text
+    orig_words = re.findall(r'\b\w+\b', re.sub(r'https?://\S+', '', claim))
+    capitalized_tokens = {w.lower() for w in orig_words if w and w[0].isupper()}
+
     # --- LAYER 1: Semantic Recall ---
-    claim_keywords = [w for w in claim_tokens if len(w) > 3 and w not in STOP_WORDS]
+    # Allow capitalized tokens of length >= 2 (e.g. US, UK, EU, WHO) to be included in keywords
+    claim_keywords = [
+        w for w in claim_tokens 
+        if w not in STOP_WORDS and (len(w) > 3 or (len(w) >= 2 and w in capitalized_tokens))
+    ]
     if not claim_keywords:
         return True
 
@@ -188,32 +204,73 @@ def passes_two_layer_matching(claim: str, title: str) -> bool:
             matched_count += 1
 
     recall = matched_count / len(claim_keywords)
-    if recall < 0.50:
+    if recall < 0.65:
         return False
 
-    # --- LAYER 2: Subject-Predicate Coherence ---
-    orig_words = re.findall(r'\b\w+\b', re.sub(r'https?://\S+', '', claim))
-    entities = []
-    actions = []
-
-    KNOWN_ACTIONS = {
-        "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
-        "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
-        "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
-        "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
-        "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+    # --- Specific Entity Verification ---
+    GENERAL_TITLES = {
+        "pm", "prime", "minister", "president", "representative", "senator", "governor", "mayor", 
+        "official", "officials", "leader", "leaders", "spokesman", "spokesperson", "reports", "says", 
+        "claims", "bill", "court", "judge", "congress", "senate", "parliament", "government", "administration",
+        "new", "york", "delhi", "washington"
     }
 
     for word in orig_words:
         lower = word.lower()
-        if lower in STOP_WORDS or len(lower) <= 2:
+        if lower in STOP_WORDS:
             continue
         
-        is_capitalized = bool(re.match(r'^[A-Z][a-z]*', word)) or bool(re.match(r'^[A-Z]+$', word))
+        is_capitalized = word and word[0].isupper()
+        if is_capitalized and len(lower) >= 2 and lower not in GENERAL_TITLES:
+            syns = get_synonyms(lower)
+            if not any(syn in title_tokens for syn in syns):
+                return False
+
+    # --- Known Action Verification ---
+    claim_known_actions = [lower for lower in (w.lower() for w in orig_words) if lower in KNOWN_ACTIONS]
+    if claim_known_actions:
+        action_matched = False
+        for act in claim_known_actions:
+            syns = get_synonyms(act)
+            if any(syn in title_tokens for syn in syns):
+                action_matched = True
+                break
+        if not action_matched:
+            return False
+
+    # --- LAYER 2: Subject-Predicate Coherence ---
+    entities = []
+    actions = []
+
+    # Find index of the first action word in the claim
+    first_action_idx = -1
+    for idx, word in enumerate(orig_words):
+        if word.lower() in KNOWN_ACTIONS:
+            first_action_idx = idx
+            break
+
+    for idx, word in enumerate(orig_words):
+        lower = word.lower()
+        if lower in STOP_WORDS:
+            continue
+        
+        is_capitalized = word and word[0].isupper()
+        if len(lower) <= 2 and not is_capitalized:
+            continue
+
         if is_capitalized:
-            entities.append(lower)
+            if first_action_idx == -1 or idx < first_action_idx:
+                entities.append(lower)
         elif lower in KNOWN_ACTIONS or len(lower) > 3:
             actions.append(lower)
+
+    # Fallback entities
+    if not entities:
+        for word in orig_words:
+            lower = word.lower()
+            is_capitalized = word and word[0].isupper()
+            if is_capitalized and len(lower) >= 2 and lower not in STOP_WORDS:
+                entities.append(lower)
 
     # Fallback actions
     if not actions:
@@ -473,7 +530,7 @@ def combine_ml_and_corroboration(
             text_lower = (original_text or corroboration.get("query", "") or "").lower()
             has_extreme_claim = any(
                 ext in text_lower for ext in 
-                ["killed", "died", "death", "assassinated", "arrested", "coup", "resigns", "resigned", "dead", "murdered", "slain"]
+                ["killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead", "microchip", "microchips", "tracking", "vaccines contain"]
             )
             if has_extreme_claim:
                 final_fake = True

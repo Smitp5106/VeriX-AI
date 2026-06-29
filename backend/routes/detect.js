@@ -227,6 +227,13 @@ function getSynonyms(word) {
   }
   return Array.from(new Set(synonyms));
 }
+const KNOWN_ACTIONS = new Set([
+  "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
+  "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
+  "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
+  "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
+  "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+]);
 
 function passesTwoLayerMatching(claim, title) {
   const cleanClaim = claim.replace(/https?:\/\/\S+/g, '').replace(/[^\w\s]/g, ' ');
@@ -249,8 +256,19 @@ function passesTwoLayerMatching(claim, title) {
     }
   }
 
+  // Helper to extract capitalized proper nouns from raw text
+  const origClaimWords = claim.replace(/https?:\/\/\S+/g, '').match(/\b\w+\b/g) || [];
+  const capitalizedTokens = new Set(
+    origClaimWords
+      .filter(w => /^[A-Z]/.test(w))
+      .map(w => w.toLowerCase())
+  );
+
   // --- LAYER 1: Semantic Recall ---
-  const claimKeywords = claimTokens.filter(w => w.length > 3 && !STOP_WORDS.has(w));
+  // Allow capitalized tokens of length >= 2 (e.g. US, UK, EU, WHO) to be included in keywords
+  const claimKeywords = claimTokens.filter(w => 
+    !STOP_WORDS.has(w) && (w.length > 3 || (w.length >= 2 && capitalizedTokens.has(w)))
+  );
   if (claimKeywords.length === 0) return true;
 
   let matchedCount = 0;
@@ -263,32 +281,98 @@ function passesTwoLayerMatching(claim, title) {
   }
 
   const recall = matchedCount / claimKeywords.length;
-  if (recall < 0.50) {
+  // Increase recall threshold to 0.65 to ensure high precision for reference links
+  if (recall < 0.65) {
     return false;
   }
 
-  // --- LAYER 2: Subject-Predicate Coherence ---
-  const origClaimWords = claim.replace(/https?:\/\/\S+/g, '').match(/\b\w+\b/g) || [];
-  const entities = [];
-  const actions = [];
-
-  const KNOWN_ACTIONS = new Set([
-    "killed", "died", "death", "murdered", "assassinated", "slain", "fatal", "dies", "kill", "dead",
-    "win", "victory", "won", "triumph", "wins", "steal", "stolen", "theft", "rob", "rigged", "stealing",
-    "arrested", "detained", "custody", "jailed", "imprisoned", "arrest", "arrests", "resign", "resigns", "resigned",
-    "ban", "banned", "bans", "illegal", "fire", "fired", "fires", "attack", "attacks", "attacked", "condolences",
-    "tribute", "sympathy", "mourn", "grief", "mourns", "tributes"
+  // --- Specific Entity Verification ---
+  // Enforce that all specific named entities (excluding general titles) in the claim must be in the title
+  const GENERAL_TITLES = new Set([
+    "pm", "prime", "minister", "president", "representative", "senator", "governor", "mayor", 
+    "official", "officials", "leader", "leaders", "spokesman", "spokesperson", "reports", "says", 
+    "claims", "bill", "court", "judge", "congress", "senate", "parliament", "government", "administration",
+    "new", "york", "delhi", "washington" // Exclude common location words that can be part of general titles or phrases
   ]);
 
   for (const word of origClaimWords) {
     const lower = word.toLowerCase();
-    if (STOP_WORDS.has(lower) || lower.length <= 2) continue;
+    if (STOP_WORDS.has(lower)) continue;
 
-    const isCapitalized = /^[A-Z][a-z]*/.test(word) || /^[A-Z]+$/.test(word);
+    const isCapitalized = /^[A-Z]/.test(word);
+    if (isCapitalized && lower.length >= 2 && !GENERAL_TITLES.has(lower)) {
+      // It's a specific named entity (e.g. Modi, Trump, Messi, Ballon, Apple, US, UK, WHO)
+      const synonyms = getSynonyms(lower);
+      const hasMatch = synonyms.some(syn => titleTokens.includes(syn));
+      if (!hasMatch) {
+        return false; // Reject if a specific named entity is missing
+      }
+    }
+  }
+
+  // --- Known Action Verification ---
+  // If the claim contains any of the known critical actions, the title must match at least one of them (or its synonyms)
+  const claimKnownActions = [];
+  for (const word of origClaimWords) {
+    const lower = word.toLowerCase();
+    if (KNOWN_ACTIONS.has(lower)) {
+      claimKnownActions.push(lower);
+    }
+  }
+  if (claimKnownActions.length > 0) {
+    let actionMatched = false;
+    for (const act of claimKnownActions) {
+      const synonyms = getSynonyms(act);
+      if (synonyms.some(syn => titleTokens.includes(syn))) {
+        actionMatched = true;
+        break;
+      }
+    }
+    if (!actionMatched) {
+      return false; // Reject if critical known action is missing from the title
+    }
+  }
+
+  // --- LAYER 2: Subject-Predicate Coherence ---
+  const entities = [];
+  const actions = [];
+
+  // Find index of the first action word in the claim
+  let firstActionIdx = -1;
+  for (let i = 0; i < origClaimWords.length; i++) {
+    const lower = origClaimWords[i].toLowerCase();
+    if (KNOWN_ACTIONS.has(lower)) {
+      firstActionIdx = i;
+      break;
+    }
+  }
+
+  for (let i = 0; i < origClaimWords.length; i++) {
+    const word = origClaimWords[i];
+    const lower = word.toLowerCase();
+    if (STOP_WORDS.has(lower)) continue;
+
+    const isCapitalized = /^[A-Z]/.test(word);
+    if (lower.length <= 2 && !isCapitalized) continue;
+
     if (isCapitalized) {
-      entities.push(lower);
+      if (firstActionIdx === -1 || i < firstActionIdx) {
+        entities.push(lower);
+      }
     } else if (KNOWN_ACTIONS.has(lower) || lower.length > 3) {
       actions.push(lower);
+    }
+  }
+
+  // Fallback entities if none found before action
+  if (entities.length === 0) {
+    for (let i = 0; i < origClaimWords.length; i++) {
+      const word = origClaimWords[i];
+      const lower = word.toLowerCase();
+      const isCapitalized = /^[A-Z]/.test(word);
+      if (isCapitalized && lower.length >= 2 && !STOP_WORDS.has(lower)) {
+        entities.push(lower);
+      }
     }
   }
 
@@ -563,7 +647,7 @@ function combineMlAndCorroboration(mlIsFake, mlConfidence, corroboration, origin
     } else {
       // Sensational or extreme claim check: if no trusted source confirms it, it is likely fake
       const textLower = (originalText || corroboration.searchQuery || "").toLowerCase();
-      const hasExtremeClaim = /\b(killed|died|death|assassinated|arrested|coup|resigns|resigned|dead|murdered|slain)\b/i.test(textLower);
+      const hasExtremeClaim = /\b(killed|died|death|assassinated|arrested|coup|resigns|resigned|dead|murdered|slain|microchip|microchips|tracking|vaccines contain)\b/i.test(textLower);
       
       if (hasExtremeClaim) {
         finalFake = true;
