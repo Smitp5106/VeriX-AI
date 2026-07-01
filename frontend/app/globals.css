@@ -83,9 +83,9 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-sans: var(--font-body), 'DM Sans', system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), 'JetBrains Mono', monospace;
-  --font-display: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-heading), 'Space Grotesk', system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -134,9 +134,14 @@
   }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: -0.01em;
   }
   html {
     scroll-behavior: smooth;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
   }
 }
 

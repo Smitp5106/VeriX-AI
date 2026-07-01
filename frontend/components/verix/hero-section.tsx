@@ -35,19 +35,7 @@ export function HeroSection() {
       <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-gradient-to-tr from-foreground/3 to-transparent blur-3xl animate-pulse delay-1000" />
       
       <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-12 py-32 lg:py-40">
-        {/* Badge */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-8"
-        >
-          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm font-medium">
-            <Sparkles className="w-4 h-4" />
-            AI-Powered Misinformation Detection
-          </span>
-        </motion.div>
-        
+
         {/* Main headline */}
         <div className="mb-12">
           <motion.h1 
@@ -123,36 +111,7 @@ export function HeroSection() {
           </motion.div>
         </div>
       </div>
-      
-      {/* Stats section */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.6 }}
-        className="absolute bottom-16 left-0 right-0"
-      >
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: "99.2%", label: "Detection Accuracy", icon: Shield },
-              { value: "50M+", label: "Articles Analyzed", icon: Scan },
-              { value: "<1s", label: "Response Time", icon: Sparkles },
-              { value: "150+", label: "Languages Supported", icon: Shield },
-            ].map((stat, i) => (
-              <motion.div 
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.7 + i * 0.1 }}
-                className="text-center md:text-left"
-              >
-                <div className="text-3xl lg:text-4xl font-bold mb-1">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
+
     </section>
   );
 }

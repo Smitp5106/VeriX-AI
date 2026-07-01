@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Shield, Eye, EyeOff, ArrowRight, Github, Chrome, Check } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { API_URL } from "@/lib/utils";
@@ -184,11 +185,23 @@ export default function SignupPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-foreground relative overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px]" />
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          <Link href="/" className="flex items-center gap-2">
-            <Shield className="w-8 h-8 text-background" />
-            <span className="text-2xl font-bold text-background">
-              VeriX<span className="text-background/70 font-normal">AI</span>
-            </span>
+          <Link href="/" className="flex items-center">
+            {/* Light Mode container (renders on dark background) -> logo-icon-dark */}
+            <Image
+              src="/logo-icon-dark-v2.png"
+              alt="VeriX AI Logo"
+              width={69}
+              height={56}
+              className="w-[69px] h-[56px] object-contain dark:hidden"
+            />
+            {/* Dark Mode container (renders on light background) -> logo-icon-light */}
+            <Image
+              src="/logo-icon-light-v2.png"
+              alt="VeriX AI Logo"
+              width={69}
+              height={56}
+              className="w-[69px] h-[56px] object-contain hidden dark:block"
+            />
           </Link>
           
           <div className="space-y-8">
@@ -234,11 +247,23 @@ export default function SignupPage() {
           className="w-full max-w-md"
         >
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <Shield className="w-8 h-8" />
-            <span className="text-2xl font-bold">
-              VeriX<span className="text-muted-foreground font-normal">AI</span>
-            </span>
+          <div className="lg:hidden flex items-center mb-8">
+            {/* Light Mode (renders on light background) -> logo-icon-light */}
+            <Image
+              src="/logo-icon-light-v2.png"
+              alt="VeriX AI Logo"
+              width={49}
+              height={40}
+              className="w-[49px] h-[40px] object-contain dark:hidden"
+            />
+            {/* Dark Mode (renders on dark background) -> logo-icon-dark */}
+            <Image
+              src="/logo-icon-dark-v2.png"
+              alt="VeriX AI Logo"
+              width={49}
+              height={40}
+              className="w-[49px] h-[40px] object-contain hidden dark:block"
+            />
           </div>
           
           <div className="space-y-6">

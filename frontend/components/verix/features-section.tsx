@@ -29,11 +29,6 @@ const features = [
     description: "Receive detailed confidence scores, sentiment analysis, and source credibility ratings for comprehensive verification."
   },
   {
-    icon: Globe,
-    title: "Multi-Language Support",
-    description: "Detect misinformation in over 150 languages. Our models are trained on diverse global datasets for accurate cross-cultural analysis."
-  },
-  {
     icon: FileSearch,
     title: "Source Verification",
     description: "Cross-reference claims against trusted databases and fact-checking organizations to verify information authenticity."

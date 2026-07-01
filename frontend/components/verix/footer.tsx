@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Shield, Twitter, Github, Linkedin, Mail } from "lucide-react";
+import Image from "next/image";
+import { Twitter, Github, Linkedin, Mail } from "lucide-react";
 
 const footerLinks = {
   product: [
@@ -37,11 +38,23 @@ export function Footer() {
         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <Shield className="w-7 h-7" />
-              <span className="text-xl font-bold">
-                VeriX<span className="text-muted-foreground font-normal">AI</span>
-              </span>
+            <Link href="/" className="flex items-center mb-4">
+              {/* Light Mode V-Icon */}
+              <Image
+                src="/logo-icon-light-v2.png"
+                alt="VeriX AI"
+                width={44}
+                height={36}
+                className="w-[44px] h-[36px] object-contain dark:hidden"
+              />
+              {/* Dark Mode V-Icon */}
+              <Image
+                src="/logo-icon-dark-v2.png"
+                alt="VeriX AI"
+                width={44}
+                height={36}
+                className="w-[44px] h-[36px] object-contain hidden dark:block"
+              />
             </Link>
             <p className="text-muted-foreground max-w-sm mb-6">
               AI-powered platform for detecting fake news and misinformation. 

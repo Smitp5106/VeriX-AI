@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Shield } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/verix/theme-toggle";
 
 const navLinks = [
@@ -65,14 +66,26 @@ export function Navigation() {
           }`}
         >
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="relative">
-              <Shield className={`transition-all duration-500 ${isScrolled ? "w-6 h-6" : "w-7 h-7"}`} />
-              <div className="absolute inset-0 bg-foreground/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+          <Link href="/" className="flex items-center group">
+            <div className="relative flex items-center">
+              {/* Light Mode V-Icon */}
+              <Image
+                src="/logo-icon-light-v2.png"
+                alt="VeriX AI"
+                width={44}
+                height={36}
+                className={`transition-all duration-500 object-contain dark:hidden ${isScrolled ? "w-[35px] h-[28px]" : "w-[44px] h-[36px]"}`}
+              />
+              {/* Dark Mode V-Icon */}
+              <Image
+                src="/logo-icon-dark-v2.png"
+                alt="VeriX AI"
+                width={44}
+                height={36}
+                className={`transition-all duration-500 object-contain hidden dark:block ${isScrolled ? "w-[35px] h-[28px]" : "w-[44px] h-[36px]"}`}
+              />
+              <div className="absolute inset-0 bg-slate-400/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <span className={`font-bold tracking-tight transition-all duration-500 ${isScrolled ? "text-lg" : "text-xl"}`}>
-              VeriX<span className="text-muted-foreground font-normal">AI</span>
-            </span>
           </Link>
 
           {/* Desktop Navigation */}
