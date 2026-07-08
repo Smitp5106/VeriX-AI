@@ -107,6 +107,12 @@ export function Navigation() {
             <ThemeToggle />
             {user ? (
               <>
+                <Link
+                  href="/dashboard"
+                  className={`text-muted-foreground hover:text-foreground font-medium transition-all duration-500 ${isScrolled ? "text-xs" : "text-sm"}`}
+                >
+                  Dashboard
+                </Link>
                 <span className={`text-muted-foreground font-medium ${isScrolled ? "text-xs" : "text-sm"}`}>
                   Hello, {user.firstName}
                 </span>
@@ -188,10 +194,15 @@ export function Navigation() {
             {user ? (
               <div className="flex-1 flex flex-col gap-2">
                 <p className="text-center text-sm text-muted-foreground">Logged in as {user.email}</p>
+                <Link href="/dashboard" className="w-full" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button className="w-full bg-muted text-foreground hover:bg-muted/80 rounded-full h-12 text-base">
+                    Dashboard
+                  </Button>
+                </Link>
                 <Button 
                   onClick={handleSignOut}
                   variant="outline" 
-                  className="w-full rounded-full h-14 text-base"
+                  className="w-full rounded-full h-12 text-base"
                 >
                   Sign out
                 </Button>
