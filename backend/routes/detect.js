@@ -868,7 +868,58 @@ function validateInputClaim(text) {
     };
   }
 
-  // 3. Simple personal/subjective statements check (e.g. "Smit is a boy")
+  // 3. Gibberish and OCR Noise checks
+  // A: Consecutive repeating characters (e.g. 'eeeee', 'ssss')
+  if (/([a-zA-Z])\1\1\1+/i.test(trimmed)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Please provide a valid news claim. Repetitive characters detected."
+    };
+  }
+
+  // B: Mathematical/code symbols not found in natural news titles
+  const symbolCount = (trimmed.match(/[=+\\|{}<>_\[\]#]/g) || []).length;
+  if (symbolCount > 2 || (symbolCount > 0 && trimmed.length < 30)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Please provide a valid news claim. Code or math symbols detected."
+    };
+  }
+
+  // C: Consonant-only/extremely long invalid word checks
+  const cleanWords = words.map(w => w.replace(/[^a-zA-Z]/g, "")).filter(w => w.length > 0);
+  if (cleanWords.length > 0) {
+    let invalidWords = 0;
+    const commonShortAbbr = new Set(["mr", "ms", "dr", "tv", "us", "uk", "pm", "mp", "eu", "un", "ai", "id", "iq", "pc", "ok", "no", "vs", "am", "pm", "in", "on", "at", "by", "to", "go", "he", "we", "me", "my", "it", "so", "as", "if", "or", "an", "do", "up", "is", "of"]);
+    
+    for (const w of cleanWords) {
+      const l = w.toLowerCase();
+      if (w.length >= 2 && !/[aeiouy]/i.test(w) && !commonShortAbbr.has(l)) {
+        invalidWords++;
+      }
+      if (w.length > 15) {
+        invalidWords++;
+      }
+    }
+    
+    if (invalidWords / cleanWords.length > 0.4) {
+      return {
+        valid: false,
+        message: "Enter proper input: Please enter readable English text."
+      };
+    }
+  }
+
+  // D: English connectives / common word check
+  const commonWords = /\b(is|am|are|was|were|be|been|being|have|has|had|do|does|did|a|an|the|and|but|if|or|because|as|until|while|of|at|by|for|with|about|against|between|into|through|during|before|after|above|below|to|from|up|down|in|out|on|off|over|under|again|further|then|once|here|there|when|where|why|how|all|any|both|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|can|will|just|should|now|i|you|he|she|it|we|they|him|her|them|us|my|your|his|its|our|their|mine|yours|hers|theirs)\b/i;
+  if (!commonWords.test(lower)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Please enter a valid sentence with standard english connectives."
+    };
+  }
+
+  // 4. Simple personal/subjective statements check (e.g. "Smit is a boy")
   const simplePatterns = [
     /^(i|you|he|she|it|we|they)\s+(am|is|are|was|were)\s+(a|an|the|my|your|his|her|its|our|their)?\s*([a-zA-Z]+)(\s+[a-zA-Z]+)?\.?$/i,
     /^[a-zA-Z]+\s+(is|was)\s+(a|an|the|my|your|his|her|its|our|their|very)?\s*([a-zA-Z]+)(\s+[a-zA-Z]+)?\.?$/i
@@ -881,15 +932,6 @@ function validateInputClaim(text) {
         message: "Enter proper input: Simple personal statements like this cannot be verified as news claims."
       };
     }
-  }
-
-  // 4. Gibberish check: must contain vowels in english words
-  const lettersOnly = trimmed.replace(/[^a-zA-Z]/g, "");
-  if (lettersOnly.length > 0 && !/[aeiouy]/i.test(lettersOnly)) {
-    return {
-      valid: false,
-      message: "Enter proper input: Please enter a valid english statement."
-    };
   }
 
   return { valid: true };
