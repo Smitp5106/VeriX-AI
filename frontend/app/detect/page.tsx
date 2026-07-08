@@ -28,6 +28,70 @@ import Link from "next/link";
 
 type ContentType = "headline" | "article" | "image";
 
+const validateInputClaim = (text: string): { valid: boolean; message?: string } => {
+  const trimmed = text.trim();
+  
+  // 1. Length check: at least 15 characters and 3 words
+  if (trimmed.length < 15) {
+    return {
+      valid: false,
+      message: "Enter proper input: Please enter a statement of at least 15 characters."
+    };
+  }
+  
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length < 3) {
+    return {
+      valid: false,
+      message: "Enter proper input: Your text must contain at least 3 words to analyze."
+    };
+  }
+
+  // 2. Conversational/Greeting check
+  const lower = trimmed.toLowerCase();
+  const greetings = /^(hello|hi|hey|greetings|good morning|good afternoon|good evening|howdy|sup|yo|testing|test|ok|okay|yes|no|thank you|thanks|bye|goodbye|welcome)\b/i;
+  if (greetings.test(lower)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Greetings, simple test messages, and conversational text are not verifiable news claims."
+    };
+  }
+
+  const conversational = /^(how are you|what is this|who are you|what is your name|where are you|tell me a joke|write a story|can you help me|who is this|what is that|why is that)\??$/i;
+  if (conversational.test(lower)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Conversational questions cannot be analyzed as news claims."
+    };
+  }
+
+  // 3. Simple personal/subjective statements check (e.g. "Smit is a boy")
+  const simplePatterns = [
+    /^(i|you|he|she|it|we|they)\s+(am|is|are|was|were)\s+(a|an|the|my|your|his|her|its|our|their)?\s*([a-zA-Z]+)(\s+[a-zA-Z]+)?\.?$/i,
+    /^[a-zA-Z]+\s+(is|was)\s+(a|an|the|my|your|his|her|its|our|their|very)?\s*([a-zA-Z]+)(\s+[a-zA-Z]+)?\.?$/i
+  ];
+
+  for (const pattern of simplePatterns) {
+    if (pattern.test(lower) && trimmed.length < 30) {
+      return {
+        valid: false,
+        message: "Enter proper input: Simple personal statements like this cannot be verified as news claims."
+      };
+    }
+  }
+
+  // 4. Gibberish check: must contain vowels in english words
+  const lettersOnly = trimmed.replace(/[^a-zA-Z]/g, "");
+  if (lettersOnly.length > 0 && !/[aeiouy]/i.test(lettersOnly)) {
+    return {
+      valid: false,
+      message: "Enter proper input: Please enter a valid english statement."
+    };
+  }
+
+  return { valid: true };
+};
+
 export default function DetectPage() {
   const router = useRouter();
   const [contentType, setContentType] = useState<ContentType>("headline");
@@ -99,6 +163,12 @@ export default function DetectPage() {
 
   const handleAnalyze = async () => {
     if (!content.trim()) return;
+    
+    const validation = validateInputClaim(content);
+    if (!validation.valid) {
+      setError(validation.message || "Enter proper input.");
+      return;
+    }
     
     setIsAnalyzing(true);
     setError(null);
