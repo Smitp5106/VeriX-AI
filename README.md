@@ -242,14 +242,6 @@ Result
 
 ---
 
-# Contributors
-
-- Patel Smit
-- Member 2
-- Member 3
-
----
-
 # License
 
 This project is developed for educational and research purposes.
