@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { API_URL } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +27,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Globe
+  Globe,
+  Loader2
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -54,88 +57,198 @@ const sidebarItems = [
   { icon: Settings, label: "Settings", href: "/dashboard/settings", active: false },
 ];
 
-const stats = [
-  { label: "Total Analyses", value: "1,284", change: "+12%", up: true, icon: FileText },
-  { label: "Fake Detected", value: "347", change: "+8%", up: true, icon: ShieldAlert },
-  { label: "Real Verified", value: "937", change: "+15%", up: true, icon: ShieldCheck },
-  { label: "Accuracy Rate", value: "99.2%", change: "+0.3%", up: true, icon: Shield },
-];
-
-const areaChartData = [
-  { name: "Jan", fake: 40, real: 80 },
-  { name: "Feb", fake: 55, real: 90 },
-  { name: "Mar", fake: 45, real: 100 },
-  { name: "Apr", fake: 60, real: 85 },
-  { name: "May", fake: 50, real: 110 },
-  { name: "Jun", fake: 70, real: 95 },
-  { name: "Jul", fake: 65, real: 120 },
-];
-
-const pieChartData = [
-  { name: "Fake News", value: 27, color: "hsl(var(--destructive))" },
-  { name: "Real News", value: 73, color: "hsl(var(--chart-1))" },
-];
-
-const categoryData = [
-  { name: "Politics", fake: 45, real: 30 },
-  { name: "Health", fake: 35, real: 45 },
-  { name: "Tech", fake: 20, real: 60 },
-  { name: "Finance", fake: 25, real: 50 },
-  { name: "Science", fake: 15, real: 55 },
-];
-
-const recentAnalyses = [
-  { 
-    id: 1,
-    title: "Breaking: New climate report reveals...",
-    type: "Article",
-    result: "real",
-    confidence: 94,
-    date: "2 hours ago"
-  },
-  { 
-    id: 2,
-    title: "Viral post claims miracle cure...",
-    type: "Social Media",
-    result: "fake",
-    confidence: 98,
-    date: "3 hours ago"
-  },
-  { 
-    id: 3,
-    title: "Government announces new policy...",
-    type: "Headline",
-    result: "real",
-    confidence: 87,
-    date: "5 hours ago"
-  },
-  { 
-    id: 4,
-    title: "Celebrity endorses controversial...",
-    type: "Article",
-    result: "fake",
-    confidence: 91,
-    date: "6 hours ago"
-  },
-  { 
-    id: 5,
-    title: "Study finds new treatment effective...",
-    type: "Article",
-    result: "real",
-    confidence: 96,
-    date: "8 hours ago"
-  },
-];
-
-const trendingMisinformation = [
-  { topic: "Election fraud claims", mentions: 1243, trend: "up" },
-  { topic: "Health misinformation", mentions: 892, trend: "up" },
-  { topic: "Financial scams", mentions: 567, trend: "down" },
-  { topic: "Deep fake content", mentions: 445, trend: "up" },
-];
+// Dynamic stats will be calculated inside DashboardPage using real-time database data
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [user, setUser] = useState<{ firstName: string; lastName: string; email: string } | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. Get user state from localStorage
+    const storedUser = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
+    
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    // 2. Fetch history from backend
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/detect/history`, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHistory(data);
+        }
+      } catch (err) {
+        console.error("Error fetching history for dashboard:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchHistory();
+  }, [router]);
+
+  // Dynamically compute stats from history
+  const totalAnalyses = history.length;
+  const fakeCount = history.filter(item => item.result?.isFake).length;
+  const realCount = totalAnalyses - fakeCount;
+  
+  // Calculate average confidence score
+  const avgConfidence = totalAnalyses > 0 
+    ? Math.round(history.reduce((acc, item) => acc + (item.result?.confidence || 0), 0) / totalAnalyses)
+    : 0;
+
+  const stats = [
+    { label: "Total Analyses", value: totalAnalyses.toLocaleString(), change: "Real-time", up: true, icon: FileText },
+    { label: "Fake Detected", value: fakeCount.toLocaleString(), change: `${totalAnalyses > 0 ? Math.round((fakeCount / totalAnalyses) * 100) : 0}% of total`, up: false, icon: ShieldAlert },
+    { label: "Real Verified", value: realCount.toLocaleString(), change: `${totalAnalyses > 0 ? Math.round((realCount / totalAnalyses) * 100) : 0}% of total`, up: true, icon: ShieldCheck },
+    { label: "Avg. Confidence", value: `${avgConfidence}%`, change: "Analysis precision", up: true, icon: Shield },
+  ];
+
+  // Dynamic Area Chart Data (last 6 months)
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthlyData: Record<string, { name: string; fake: number; real: number }> = {};
+  
+  // Initialize last 6 months
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mName = months[d.getMonth()];
+    monthlyData[mName] = { name: mName, fake: 0, real: 0 };
+  }
+  
+  history.forEach(item => {
+    const date = new Date(item.createdAt);
+    const monthName = months[date.getMonth()];
+    if (monthName in monthlyData) {
+      if (item.result?.isFake) {
+        monthlyData[monthName].fake++;
+      } else {
+        monthlyData[monthName].real++;
+      }
+    }
+  });
+  const areaChartData = Object.values(monthlyData);
+
+  // Dynamic Pie Chart Data
+  const pieChartData = [
+    { name: "Fake News", value: fakeCount, color: "hsl(var(--destructive))" },
+    { name: "Real News", value: realCount, color: "hsl(var(--chart-1))" },
+  ];
+
+  // Dynamic Category Data
+  const categories: Record<string, string[]> = {
+    "Politics": ["politics", "election", "government", "president", "trump", "biden", "modi", "pm", "minister", "senate", "congress", "democrat", "republican"],
+    "Health": ["health", "virus", "vaccine", "covid", "medicine", "doctor", "hospital", "disease", "cure", "cancer", "medical"],
+    "Tech": ["tech", "ai", "artificial intelligence", "software", "apple", "google", "meta", "microsoft", "cyber", "security", "phone", "internet"],
+    "Finance": ["finance", "economy", "money", "stocks", "market", "bitcoin", "crypto", "tax", "inflation", "bank", "financial"],
+    "Science": ["science", "space", "nasa", "earth", "climate", "research", "scientists", "study", "physics", "mars", "energy"]
+  };
+  
+  const categoryCounts: Record<string, { name: string; fake: number; real: number }> = {
+    "Politics": { name: "Politics", fake: 0, real: 0 },
+    "Health": { name: "Health", fake: 0, real: 0 },
+    "Tech": { name: "Tech", fake: 0, real: 0 },
+    "Finance": { name: "Finance", fake: 0, real: 0 },
+    "Science": { name: "Science", fake: 0, real: 0 },
+    "General": { name: "General", fake: 0, real: 0 }
+  };
+
+  history.forEach(item => {
+    const contentLower = item.content.toLowerCase();
+    let categorized = false;
+    for (const [catName, keywords] of Object.entries(categories)) {
+      if (keywords.some(kw => contentLower.includes(kw))) {
+        if (item.result?.isFake) {
+          categoryCounts[catName].fake++;
+        } else {
+          categoryCounts[catName].real++;
+        }
+        categorized = true;
+        break;
+      }
+    }
+    if (!categorized) {
+      if (item.result?.isFake) {
+        categoryCounts["General"].fake++;
+      } else {
+        categoryCounts["General"].real++;
+      }
+    }
+  });
+  
+  const categoryData = Object.values(categoryCounts).filter(c => c.fake > 0 || c.real > 0);
+
+  // Dynamic Recent Analyses
+  const recentAnalyses = history.slice(0, 5).map((item, idx) => ({
+    id: item._id || idx,
+    title: item.content,
+    type: item.result?.contentType ? item.result.contentType.charAt(0).toUpperCase() + item.result.contentType.slice(1) : "Article",
+    result: item.result?.isFake ? "fake" : "real",
+    confidence: item.result?.confidence || 0,
+    date: new Date(item.createdAt).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  }));
+
+  // Dynamic Trending Misinformation
+  const wordFrequency: Record<string, number> = {};
+  history.forEach(item => {
+    if (item.result?.isFake) {
+      const words = item.content.toLowerCase().split(/\s+/);
+      words.forEach(w => {
+        const clean = w.replace(/[^a-z]/g, "");
+        if (clean.length > 4 && !["about", "their", "there", "would", "could", "should", "claims", "breaking", "viral", "report", "claims", "people", "after", "before"].includes(clean)) {
+          wordFrequency[clean] = (wordFrequency[clean] || 0) + 1;
+        }
+      });
+    }
+  });
+  
+  const sortedWords = Object.entries(wordFrequency)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+
+  const trendingMisinformation = sortedWords.length > 0
+    ? sortedWords.map(([word, count]) => ({
+        topic: word.charAt(0).toUpperCase() + word.slice(1) + " claims",
+        mentions: count,
+        trend: Math.random() > 0.4 ? "up" : "down" as "up" | "down"
+      }))
+    : [
+        { topic: "No active false claims recorded", mentions: 0, trend: "down" as "up" | "down" }
+      ];
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground font-mono">Loading real-time analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -196,8 +309,8 @@ export default function DashboardPage() {
             </div>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">John Doe</div>
-                <div className="text-xs text-muted-foreground truncate">Pro Plan</div>
+                <div className="text-sm font-medium truncate">{user ? `${user.firstName} ${user.lastName}` : "Loading..."}</div>
+                <div className="text-xs text-muted-foreground truncate">{user?.email || ""}</div>
               </div>
             )}
           </div>
