@@ -725,25 +725,7 @@ export default function DetectPage() {
             )}
           </motion.div>
           
-          {/* Features */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="mt-12 grid md:grid-cols-3 gap-6"
-          >
-            {[
-              { icon: Shield, title: "99.2% Accuracy", description: "Industry-leading detection precision" },
-              { icon: Zap, title: "Instant Results", description: "Analysis in under 1 second" },
-              { icon: Globe, title: "150+ Languages", description: "Multilingual support" },
-            ].map((feature, i) => (
-              <div key={feature.title} className="text-center p-6 rounded-xl bg-card border border-border">
-                <feature.icon className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-                <h3 className="font-semibold mb-1">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground">{feature.description}</p>
-              </div>
-            ))}
-          </motion.div>
+
         </div>
       </div>
       
