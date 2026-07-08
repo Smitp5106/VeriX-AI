@@ -28,6 +28,7 @@ import {
   Globe
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/verix/theme-toggle";
 import {
   AreaChart,
@@ -143,13 +144,25 @@ export default function DashboardPage() {
         sidebarOpen ? "w-64" : "w-20"
       }`}>
         {/* Logo */}
-        <div className="h-16 flex items-center gap-2 px-6 border-b border-border">
-          <Shield className="w-8 h-8 shrink-0" />
-          {sidebarOpen && (
-            <span className="text-xl font-bold whitespace-nowrap">
-              VeriX<span className="text-muted-foreground font-normal">AI</span>
-            </span>
-          )}
+        <div className="h-16 flex items-center justify-center border-b border-border">
+          <Link href="/" className="flex items-center justify-center">
+            {/* Light Mode V-Icon */}
+            <Image
+              src="/logo-icon-light-v2.png"
+              alt="VeriX AI"
+              width={44}
+              height={36}
+              className="w-[44px] h-[36px] object-contain dark:hidden"
+            />
+            {/* Dark Mode V-Icon */}
+            <Image
+              src="/logo-icon-dark-v2.png"
+              alt="VeriX AI"
+              width={44}
+              height={36}
+              className="w-[44px] h-[36px] object-contain hidden dark:block"
+            />
+          </Link>
         </div>
         
         {/* Navigation */}
