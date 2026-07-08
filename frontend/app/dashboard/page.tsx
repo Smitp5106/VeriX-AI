@@ -50,11 +50,11 @@ import {
 } from "recharts";
 
 const sidebarItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
-  { icon: Search, label: "New Analysis", href: "/detect", active: false },
-  { icon: History, label: "History", href: "/dashboard/history", active: false },
-  { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics", active: false },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings", active: false },
+  { icon: LayoutDashboard, label: "Dashboard", value: "dashboard" },
+  { icon: Search, label: "New Analysis", value: "new_analysis", href: "/detect" },
+  { icon: History, label: "History", value: "history" },
+  { icon: BarChart3, label: "Analytics", value: "analytics" },
+  { icon: Settings, label: "Settings", value: "settings" },
 ];
 
 // Dynamic stats will be calculated inside DashboardPage using real-time database data
@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<{ firstName: string; lastName: string; email: string } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   useEffect(() => {
     // 1. Get user state from localStorage
@@ -281,21 +282,39 @@ export default function DashboardPage() {
         {/* Navigation */}
         <nav className="flex-1 py-6 px-3">
           <ul className="space-y-1">
-            {sidebarItems.map((item) => (
-              <li key={item.label}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                    item.active 
-                      ? "bg-foreground text-background" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                >
-                  <item.icon className="w-5 h-5 shrink-0" />
-                  {sidebarOpen && <span>{item.label}</span>}
-                </Link>
-              </li>
-            ))}
+            {sidebarItems.map((item) => {
+              const isActive = activeTab === item.value;
+              
+              if (item.href) {
+                return (
+                  <li key={item.label}>
+                    <Link
+                      href={item.href}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-muted"
+                    >
+                      <item.icon className="w-5 h-5 shrink-0" />
+                      {sidebarOpen && <span>{item.label}</span>}
+                    </Link>
+                  </li>
+                );
+              }
+
+              return (
+                <li key={item.label}>
+                  <button
+                    onClick={() => setActiveTab(item.value)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                      isActive 
+                        ? "bg-foreground text-background font-semibold" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 shrink-0" />
+                    {sidebarOpen && <span>{item.label}</span>}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
         
@@ -328,7 +347,7 @@ export default function DashboardPage() {
             >
               <LayoutDashboard className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-semibold">Dashboard</h1>
+            <h1 className="text-xl font-semibold capitalize">{activeTab}</h1>
           </div>
           
           <div className="flex items-center gap-3">
@@ -347,261 +366,541 @@ export default function DashboardPage() {
         
         {/* Dashboard Content */}
         <div className="p-6 space-y-6">
-          {/* Stats Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map((stat, i) => (
+          {activeTab === "dashboard" && (
+            <>
+              {/* Stats Grid */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {stats.map((stat, i) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                  >
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="w-10 h-10 rounded-lg bg-foreground/5 flex items-center justify-center">
+                            <stat.icon className="w-5 h-5" />
+                          </div>
+                          <div className={`flex items-center gap-1 text-sm ${
+                            stat.up ? "text-success" : "text-destructive"
+                          }`}>
+                            {stat.up ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                            {stat.change}
+                          </div>
+                        </div>
+                        <div className="text-3xl font-bold mb-1">{stat.value}</div>
+                        <div className="text-sm text-muted-foreground">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+              
+              {/* Charts Row */}
+              <div className="grid lg:grid-cols-3 gap-6">
+                {/* Area Chart */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.4 }}
+                  className="lg:col-span-2"
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>Analysis Trends</span>
+                        <div className="flex items-center gap-4 text-sm font-normal">
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-chart-1" />
+                            Real
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-destructive" />
+                            Fake
+                          </span>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={areaChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: "hsl(var(--card))", 
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px"
+                              }} 
+                            />
+                            <Area type="monotone" dataKey="real" stackId="1" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.2} />
+                            <Area type="monotone" dataKey="fake" stackId="2" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.2} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+                
+                {/* Pie Chart */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.5 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detection Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[250px]">
+                        {totalAnalyses > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPieChart>
+                              <Pie
+                                data={pieChartData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={90}
+                                paddingAngle={2}
+                                dataKey="value"
+                              >
+                                {pieChartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </RechartsPieChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                            No verification data
+                          </div>
+                        )}
+                      </div>
+                      {totalAnalyses > 0 && (
+                        <div className="flex justify-center gap-6 mt-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-success" />
+                            <span className="text-sm">Real News: {Math.round((realCount / totalAnalyses) * 100)}%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-destructive" />
+                            <span className="text-sm">Fake News: {Math.round((fakeCount / totalAnalyses) * 100)}%</span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </div>
+              
+              {/* Bottom Row */}
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Recent Analyses */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.6 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>Recent Analyses</span>
+                        <button 
+                          onClick={() => setActiveTab("history")}
+                          className="text-sm font-normal text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+                        >
+                          View all <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {recentAnalyses.length > 0 ? (
+                        <div className="divide-y divide-border">
+                          {recentAnalyses.map((analysis) => (
+                            <div key={analysis.id} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                analysis.result === "fake" 
+                                  ? "bg-destructive/10 text-destructive" 
+                                  : "bg-success/10 text-success"
+                              }`}>
+                                {analysis.result === "fake" ? (
+                                  <AlertTriangle className="w-5 h-5" />
+                                ) : (
+                                  <CheckCircle className="w-5 h-5" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{analysis.title}</div>
+                                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                  <span>{analysis.type}</span>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {analysis.date}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className={`text-sm font-medium ${
+                                  analysis.result === "fake" ? "text-destructive" : "text-success"
+                                }`}>
+                                  {analysis.result === "fake" ? "Fake" : "Real"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{analysis.confidence}%</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-10 text-muted-foreground text-sm">
+                          No recent analyses found.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+                
+                {/* Trending Misinformation */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.7 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>Trending Misinformation Topics</span>
+                        <Globe className="w-5 h-5 text-muted-foreground" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {trendingMisinformation.map((topic, i) => (
+                          <div key={topic.topic} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{topic.topic}</span>
+                              <div className={`flex items-center gap-1 text-xs ${
+                                topic.trend === "up" ? "text-destructive" : "text-success"
+                              }`}>
+                                {topic.trend === "up" ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : (
+                                  <TrendingDown className="w-3 h-3" />
+                                )}
+                                {topic.mentions.toLocaleString()} mentions
+                              </div>
+                            </div>
+                            <Progress 
+                              value={topic.mentions > 0 ? (topic.mentions / 5) * 100 : 0} 
+                              className="h-2"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </div>
+              
+              {/* Category Breakdown */}
               <motion.div
-                key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.1 }}
+                transition={{ duration: 0.4, delay: 0.8 }}
               >
                 <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-10 h-10 rounded-lg bg-foreground/5 flex items-center justify-center">
-                        <stat.icon className="w-5 h-5" />
-                      </div>
-                      <div className={`flex items-center gap-1 text-sm ${
-                        stat.up ? "text-success" : "text-destructive"
-                      }`}>
-                        {stat.up ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                        {stat.change}
-                      </div>
+                  <CardHeader>
+                    <CardTitle>Analysis by Category</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      {categoryData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={categoryData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: "hsl(var(--card))", 
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px"
+                              }} 
+                            />
+                            <Legend />
+                            <Bar dataKey="real" name="Real" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="fake" name="Fake" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                          No category statistics yet.
+                        </div>
+                      )}
                     </div>
-                    <div className="text-3xl font-bold mb-1">{stat.value}</div>
-                    <div className="text-sm text-muted-foreground">{stat.label}</div>
                   </CardContent>
                 </Card>
               </motion.div>
-            ))}
-          </div>
-          
-          {/* Charts Row */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Area Chart */}
+            </>
+          )}
+
+          {activeTab === "history" && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.4 }}
-              className="lg:col-span-2"
+              transition={{ duration: 0.4 }}
+              className="space-y-6"
             >
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Analysis Trends</span>
-                    <div className="flex items-center gap-4 text-sm font-normal">
-                      <span className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-chart-1" />
-                        Real
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-destructive" />
-                        Fake
-                      </span>
-                    </div>
-                  </CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Analysis Logs</CardTitle>
+                  <span className="text-xs font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-full">
+                    {history.length} Scans Found
+                  </span>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[300px]">
+                  {history.length > 0 ? (
+                    <div className="space-y-3">
+                      {history.map((item, idx) => {
+                        const isFake = item.result?.isFake;
+                        return (
+                          <div 
+                            key={item._id || idx}
+                            className="p-4 rounded-xl border border-border/80 hover:border-foreground/20 bg-muted/10 hover:bg-muted/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                          >
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-sm font-medium text-foreground line-clamp-2">{item.content}</p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
+                                <span>{new Date(item.createdAt).toLocaleString()}</span>
+                                <span>•</span>
+                                <span className="capitalize">{item.result?.contentType || "Article"}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-mono font-bold border ${
+                                isFake 
+                                  ? "bg-destructive/10 text-destructive border-destructive/20" 
+                                  : "bg-success/10 text-success border-success/20"
+                              }`}>
+                                {isFake ? "Fake" : "Real"} ({item.result?.confidence || 0}%)
+                              </span>
+                              <Button
+                                onClick={() => {
+                                  localStorage.setItem("verix_analysis_content", item.content);
+                                  localStorage.setItem("verix_analysis_type", item.result?.contentType || "article");
+                                  localStorage.setItem("verix_analysis_result", JSON.stringify(item.result));
+                                  router.push("/result");
+                                }}
+                                size="sm"
+                                variant="outline"
+                                className="rounded-full hover:bg-foreground hover:text-background"
+                              >
+                                View Details
+                                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <History className="w-12 h-12 mx-auto mb-3 opacity-30 animate-pulse" />
+                      <p className="text-sm">No analysis history found. Start scanning headlines to build your history log.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {activeTab === "analytics" && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="space-y-6"
+            >
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Historical Verification volume</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={areaChartData}>
+                        <defs>
+                          <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorFake" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: "hsl(var(--card))", 
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "8px"
-                          }} 
-                        />
-                        <Area type="monotone" dataKey="real" stackId="1" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.2} />
-                        <Area type="monotone" dataKey="fake" stackId="2" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive))" fillOpacity={0.2} />
+                        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                        <Area type="monotone" dataKey="real" stroke="hsl(var(--chart-1))" fillOpacity={1} fill="url(#colorReal)" name="Real Claims" />
+                        <Area type="monotone" dataKey="fake" stroke="hsl(var(--destructive))" fillOpacity={1} fill="url(#colorFake)" name="Fake Claims" />
                       </AreaChart>
                     </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Category Distributions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[300px]">
+                    {categoryData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={categoryData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                          <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
+                          <Legend />
+                          <Bar dataKey="real" name="Real" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="fake" name="Fake" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                        No categorization data
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Claim Shares Ratio</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col items-center justify-center h-[300px]">
+                    {totalAnalyses > 0 ? (
+                      <>
+                        <div className="h-[180px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPieChart>
+                              <Pie
+                                data={pieChartData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={50}
+                                outerRadius={70}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                {pieChartData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </RechartsPieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex gap-6 justify-center text-sm font-medium mt-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3.5 h-3.5 rounded-full bg-success" />
+                            <span>Real News: {Math.round((realCount / totalAnalyses) * 100)}%</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3.5 h-3.5 rounded-full bg-destructive" />
+                            <span>Fake News: {Math.round((fakeCount / totalAnalyses) * 100)}%</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">No verification shares data yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </motion.div>
-            
-            {/* Pie Chart */}
+          )}
+
+          {activeTab === "settings" && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.5 }}
+              transition={{ duration: 0.4 }}
+              className="space-y-6"
             >
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detection Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={pieChartData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {pieChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex justify-center gap-6 mt-4">
-                    {pieChartData.map((item) => (
-                      <div key={item.name} className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-sm">{item.name}: {item.value}%</span>
+              <div className="grid md:grid-cols-3 gap-6">
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Account Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground uppercase font-mono">First Name</span>
+                        <p className="font-semibold">{user?.firstName || "N/A"}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-          
-          {/* Bottom Row */}
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Recent Analyses */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.6 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Recent Analyses</span>
-                    <Link href="/dashboard/history" className="text-sm font-normal text-muted-foreground hover:text-foreground flex items-center gap-1">
-                      View all <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y divide-border">
-                    {recentAnalyses.map((analysis) => (
-                      <div key={analysis.id} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          analysis.result === "fake" 
-                            ? "bg-destructive/10 text-destructive" 
-                            : "bg-success/10 text-success"
-                        }`}>
-                          {analysis.result === "fake" ? (
-                            <AlertTriangle className="w-5 h-5" />
-                          ) : (
-                            <CheckCircle className="w-5 h-5" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{analysis.title}</div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-2">
-                            <span>{analysis.type}</span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {analysis.date}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`text-sm font-medium ${
-                            analysis.result === "fake" ? "text-destructive" : "text-success"
-                          }`}>
-                            {analysis.result === "fake" ? "Fake" : "Real"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">{analysis.confidence}%</div>
-                        </div>
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground uppercase font-mono">Last Name</span>
+                        <p className="font-semibold">{user?.lastName || "N/A"}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-            
-            {/* Trending Misinformation */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.7 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Trending Misinformation Topics</span>
-                    <Globe className="w-5 h-5 text-muted-foreground" />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {trendingMisinformation.map((topic, i) => (
-                      <div key={topic.topic} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{topic.topic}</span>
-                          <div className={`flex items-center gap-1 text-xs ${
-                            topic.trend === "up" ? "text-destructive" : "text-success"
-                          }`}>
-                            {topic.trend === "up" ? (
-                              <TrendingUp className="w-3 h-3" />
-                            ) : (
-                              <TrendingDown className="w-3 h-3" />
-                            )}
-                            {topic.mentions.toLocaleString()} mentions
-                          </div>
-                        </div>
-                        <Progress 
-                          value={(topic.mentions / 1500) * 100} 
-                          className="h-2"
-                        />
+                      <div className="col-span-2 space-y-1">
+                        <span className="text-xs text-muted-foreground uppercase font-mono">Email Address</span>
+                        <p className="font-semibold">{user?.email || "N/A"}</p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                    </div>
+                    <div className="border-t border-border pt-6 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="font-semibold text-sm">Authentication Token</p>
+                        <p className="text-xs text-muted-foreground">Keep this key secure. It provides API access.</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="rounded-full" onClick={() => {
+                        const token = localStorage.getItem("token");
+                        if (token) {
+                          navigator.clipboard.writeText(token);
+                          alert("Auth Token copied to clipboard!");
+                        }
+                      }}>
+                        Copy Token
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Preferences</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Dark Theme</span>
+                      <ThemeToggle />
+                    </div>
+                    <div className="border-t border-border pt-6">
+                      <Button 
+                        onClick={() => {
+                          localStorage.removeItem("token");
+                          localStorage.removeItem("user");
+                          router.push("/login");
+                        }}
+                        variant="destructive" 
+                        className="w-full rounded-full"
+                      >
+                        Sign Out
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </motion.div>
-          </div>
-          
-          {/* Category Breakdown */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.8 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle>Analysis by Category</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
-                      />
-                      <Legend />
-                      <Bar dataKey="real" name="Real" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="fake" name="Fake" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          )}
         </div>
       </main>
     </div>
