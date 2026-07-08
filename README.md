@@ -1,4 +1,4 @@
-# VeriX AI - Smart Fake News & Social Media Misinformation Detection System
+# VeriX AI - Smart Fake News Misinformation Detection System
 
 ## Overview
 
